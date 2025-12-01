@@ -8,7 +8,7 @@ import time
 
 load_dotenv()
 
-st.set_page_config(page_title="AI Workbench", layout="wide")
+st.set_page_config(page_title="AI Workbench - Data Pipeline Assistant", layout="wide")
 st.title("🚀 AI Workbench")
 
 API_URL = st.sidebar.text_input("Backend URL", "http://localhost:8000")
@@ -102,17 +102,66 @@ if not st.session_state.tasks:
 # =================================== UI ===================================
 tab1, tab2, tab3, tab4 = st.tabs(["Chat", "Tools", "Tasks", "Logs"])
 
+# 在 tab1 部分替换为以下代码：
 with tab1:
     st.header("Chat")
+    
+    # System prompt selection
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        system_prompt = st.selectbox(
+            "AI Role",
+            options=["general", "data_engineer", "ml_engineer", "analyst"],
+            format_func=lambda x: x.replace("_", " ").title(),
+            key="system_prompt"
+        )
+    with col2:
+        use_tools = st.checkbox("Enable Tools", value=True, key="use_tools")
+    
+    # Display chat messages
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
+            # Show tools used if available
+            if msg.get("tools_used"):
+                st.caption(f"🛠️ Tools used: {', '.join(msg['tools_used'])}")
 
+    # Chat input
     if prompt := st.chat_input("Type a message..."):
+        # Add user message
         st.session_state.messages.append({"role": "user", "content": prompt})
+        
         with st.chat_message("user"):
             st.markdown(prompt)
-        requests.post(f"{API_URL}/chat", json={"message": prompt})
+        
+        # Send to backend with system prompt and tool preference
+        try:
+            response = requests.post(
+                f"{API_URL}/chat", 
+                json={
+                    "message": prompt,
+                    "system_prompt": system_prompt,
+                    "use_tools": use_tools
+                }
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                # Add assistant response with tool info
+                assistant_msg = {
+                    "role": "assistant", 
+                    "content": data["answer"]
+                }
+                if "tools_used" in data:
+                    assistant_msg["tools_used"] = data["tools_used"]
+                
+                st.session_state.messages.append(assistant_msg)
+                st.rerun()
+            else:
+                st.error("Failed to get response from backend")
+                
+        except Exception as e:
+            st.error(f"Error: {e}")
 
 with tab2:
     st.header("Tools")
