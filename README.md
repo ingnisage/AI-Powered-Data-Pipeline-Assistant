@@ -85,7 +85,7 @@ Set the following environment variables:
 
 1. Start the backend server:
    ```bash
-   BACKEND_API_KEY=your-api-key OPENAI_API_KEY=your-openai-key python backend/main.py
+   BACKEND_API_KEY=your-api-key OPENAI_API_KEY=your-openai-key python main.py
    ```
 
 2. In a separate terminal, start the frontend:
