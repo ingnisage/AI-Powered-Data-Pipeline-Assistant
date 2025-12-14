@@ -1,11 +1,44 @@
-__pycache__/
-*.pyc
-.pyc
-.env
+# System files
 .DS_Store
+Thumbs.db
+Desktop.ini
+
+# Environment variables
 .env
+.env.*
+*.env
+
+# Python cache
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.python-version
+
+# Log files
 *.log
-backend.log
-streamlit.log
+
+# IDE and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-*
+
+# Dependencies and builds
+venv/
+env/
+dist/
+build/
+*.egg-info/
+*.egg
+
+# Temporary files
+*.tmp
+*.temp
+~$*
+
+# Data files (optional - uncomment if needed)
+# data/*.db
+# data/*.sqlite
+# data/*.csv
