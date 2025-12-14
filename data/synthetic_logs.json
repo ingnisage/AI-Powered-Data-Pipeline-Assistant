@@ -1,4 +1,0 @@
-[
-    {"time": "2025-04-05 10:00", "level": "INFO", "message": "System started"},
-    {"time": "2025-04-05 10:01", "level": "INFO", "message": "Connected to OpenAI"},
-]

@@ -1,5 +1,0 @@
-[
-    {"id": 1, "name": "Data Preprocessing", "status": "Completed", "progress": 100},
-    {"id": 2, "name": "Model Training", "status": "In Progress", "progress": 65},
-    {"id": 3, "name": "Model Evaluation", "status": "Pending", "progress": 0},
-]
