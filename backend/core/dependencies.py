@@ -73,16 +73,37 @@ class ServiceContainer:
         # Initialize Supabase
         try:
             supabase_url = os.getenv("SUPABASE_URL")
-            # Use SUPABASE_KEY as fallback if SERVICE_ROLE_KEY is not available
+            # Use SUPABASE_SERVICE_ROLE_KEY as primary, SUPABASE_KEY as fallback
             supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
             
+            logger.info(f"Supabase config - URL: {supabase_url[:30] if supabase_url else 'None'}...")
+            logger.info(f"Supabase key type: {'SERVICE_ROLE_KEY' if os.getenv('SUPABASE_SERVICE_ROLE_KEY') else 'SUPABASE_KEY (fallback)'}")
+            logger.info(f"Supabase key present: {supabase_key is not None}")
+            
             if supabase_url and supabase_key:
+                logger.info("Initializing Supabase client...")
                 self._supabase_client = create_client(supabase_url, supabase_key)
                 self._health_status["supabase"] = {"status": "healthy", "error": None}
                 logger.info("Supabase client initialized successfully")
+                
+                # Test the connection
+                try:
+                    logger.info("Testing Supabase connection...")
+                    response = self._supabase_client.table("tasks").select("id").limit(1).execute()
+                    logger.info(f"Supabase connection test successful. Sample response: {response.data if response else 'None'}")
+                except Exception as test_error:
+                    error_msg = f"Supabase connection test failed: {test_error}"
+                    logger.error(error_msg)
+                    self._health_status["supabase"] = {"status": "error", "error": error_msg}
             else:
-                self._health_status["supabase"] = {"status": "disabled", "error": "Credentials not provided"}
-                logger.warning("Supabase client not initialized: credentials missing")
+                missing = []
+                if not supabase_url:
+                    missing.append("SUPABASE_URL")
+                if not supabase_key:
+                    missing.append("SUPABASE_SERVICE_ROLE_KEY or SUPABASE_KEY")
+                error_msg = f"Credentials not provided: {', '.join(missing)}"
+                self._health_status["supabase"] = {"status": "disabled", "error": error_msg}
+                logger.warning(f"Supabase client not initialized: {error_msg}")
         except Exception as e:
             self._health_status["supabase"] = {"status": "error", "error": str(e)}
             logger.error(f"Failed to initialize Supabase client: {e}", exc_info=True)
@@ -155,8 +176,12 @@ class ServiceContainer:
         Raises:
             RuntimeError: If service is in error state
         """
+        logger.info(f"Getting Supabase client. Health status: {self._health_status['supabase']}")
         if self._health_status["supabase"]["status"] == "error":
-            raise RuntimeError(f"Supabase service error: {self._health_status['supabase']['error']}")
+            error_msg = f"Supabase service error: {self._health_status['supabase']['error']}"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+        logger.info(f"Returning Supabase client: {self._supabase_client is not None}")
         return self._supabase_client
     
     def get_pubnub_client(self) -> Optional[PubNub]:

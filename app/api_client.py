@@ -105,7 +105,7 @@ class WorkbenchAPI:
             r.raise_for_status()
             
             if r.status_code in (200, 201):
-                task = r.json().get("task") if r.content else None
+                task = r.json()  # The response is the task object directly, not wrapped in {"task": ...}
                 logger.info(f"Successfully created task: {name}")
                 return True, task, None
             else:

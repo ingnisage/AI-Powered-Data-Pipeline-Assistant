@@ -37,10 +37,13 @@ async def get_chat_history(limit: int = 10, supabase_client = Depends(get_supaba
     """Get chat history from database."""
     try:
         logger.info(f"Fetching chat history with limit {limit}")
+        logger.info(f"Supabase client available: {supabase_client is not None}")
         
         # Fetch chat history from database
         if supabase_client:
+            logger.info("Executing Supabase query for chat history")
             response = supabase_client.table("chat_history").select("*").order("created_at", desc=True).limit(limit).execute()
+            logger.info(f"Supabase response received: {response is not None}")
             messages = response.data if response and hasattr(response, 'data') else []
             logger.info(f"Successfully fetched {len(messages)} chat messages from database")
             return ChatHistoryResponse(messages=messages)
@@ -48,7 +51,7 @@ async def get_chat_history(limit: int = 10, supabase_client = Depends(get_supaba
             logger.warning("Supabase client not available")
             return ChatHistoryResponse(messages=[])
     except Exception as e:
-        logger.error(f"Error fetching chat history: {e}")
+        logger.error(f"Error fetching chat history: {e}", exc_info=True)
         return ChatHistoryResponse(messages=[])
 
 @router.post("/", response_model=ChatResponse, dependencies=[Depends(verify_api_key_dependency)])

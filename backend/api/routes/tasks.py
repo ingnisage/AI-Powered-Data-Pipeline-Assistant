@@ -36,9 +36,13 @@ async def get_tasks(supabase_client = Depends(get_supabase_client)):
     """Get all tasks from database."""
     try:
         logger.info("Fetching all tasks")
+        logger.info(f"Supabase client available: {supabase_client is not None}")
         if supabase_client:
+            logger.info("Executing Supabase query")
             response = supabase_client.table("tasks").select("*").order("created_at", desc=True).execute()
+            logger.info(f"Supabase response received: {response is not None}")
             tasks = response.data if response and hasattr(response, 'data') else []
+            logger.info(f"Number of tasks fetched: {len(tasks)}")
             # Convert task IDs to strings to match the model expectation
             for task in tasks:
                 if 'id' in task and isinstance(task['id'], int):
@@ -49,8 +53,14 @@ async def get_tasks(supabase_client = Depends(get_supabase_client)):
             logger.warning("Supabase client not available")
             return TaskListResponse(tasks=[])
     except Exception as e:
-        logger.error(f"Error fetching tasks: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch tasks")
+        logger.error(f"Error fetching tasks: {e}", exc_info=True)
+        # Provide more specific error information
+        error_detail = f"Failed to fetch tasks: {str(e)}"
+        if "connection" in str(e).lower():
+            error_detail = "Database connection failed."
+        elif "timeout" in str(e).lower():
+            error_detail = "Database timeout."
+        raise HTTPException(status_code=500, detail=error_detail)
 
 @router.post("/", response_model=TaskResponse, dependencies=[Depends(verify_api_key_dependency)])
 async def create_task(
