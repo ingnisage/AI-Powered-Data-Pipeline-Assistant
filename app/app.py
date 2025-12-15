@@ -147,8 +147,12 @@ st.sidebar.markdown(f"**{backend_type}**: `{current_backend_display}`")
 
 # Check if we're using a test API key and warn the user
 API_KEY = os.environ.get("BACKEND_API_KEY", "test-api-key")
+logger.info(f"Backend API Key loaded: {API_KEY[:8]}... (hidden for security)")
 if API_KEY == "test-api-key":
     st.sidebar.error("⚠️ **Test API Key Detected**\n\nAuthentication may fail. Set `BACKEND_API_KEY` environment variable.")
+    logger.warning("USING TEST API KEY - AUTHENTICATION MAY FAIL")
+else:
+    logger.info("Using valid backend API key")
 
 # Allow manual override - only show if user wants to change it
 with st.sidebar.expander("⚙️ Advanced Settings"):
@@ -389,10 +393,23 @@ def process_incoming_messages() -> None:
                 has_updates = True
 
             elif channel == "tasks" and isinstance(data, dict):
+                logger.info(f"Received task message: {data}")
                 if data.get("type") == "created":
-                    _upsert_task_in_state(data.get("task"))
+                    task_data = data.get("task")
+                    if task_data:
+                        logger.info(f"Adding new task: {task_data}")
+                        _upsert_task_in_state(task_data)
+                    else:
+                        logger.warning("Task creation message missing task data")
                 elif data.get("type") == "updated":
-                    _upsert_task_in_state(data.get("task"))
+                    task_data = data.get("task")
+                    if task_data:
+                        logger.info(f"Updating task: {task_data}")
+                        _upsert_task_in_state(task_data)
+                    else:
+                        logger.warning("Task update message missing task data")
+                else:
+                    logger.warning(f"Unknown task message type: {data.get('type')}")
                 has_updates = True
 
             # Logs channel processing removed as per user request
@@ -432,6 +449,9 @@ if not st.session_state.tasks:
         st.session_state.tasks = TaskManager.deduplicate(tasks)
         st.session_state.tasks_updated_at = time.time()
         logger.info(f"Loaded {len(st.session_state.tasks)} tasks successfully")
+        # Log the first few tasks for debugging
+        if st.session_state.tasks:
+            logger.info(f"First task sample: {st.session_state.tasks[0] if len(st.session_state.tasks) > 0 else 'No tasks'}")
     elif error and "connect" not in error.lower():
         st.warning(f"⚠️ {error}")
         logger.warning(f"Failed to load initial tasks: {error}")

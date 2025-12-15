@@ -42,6 +42,7 @@ class SecurityManager:
     def _load_api_keys(self) -> None:
         """Load API keys from environment with metadata."""
         backend_key = os.getenv("BACKEND_API_KEY")
+        logger.info(f"Backend key from environment: {backend_key[:8] if backend_key else 'None'}... (hidden for security)")
         if backend_key:
             # Hash the key for constant-time comparison
             key_hash = hashlib.sha256(backend_key.encode()).hexdigest()
@@ -52,6 +53,8 @@ class SecurityManager:
                 "rate_limit_tier": "standard"
             }
             logger.info(f"Loaded {len(self._api_keys)} API key(s) from environment")
+        else:
+            logger.warning("No BACKEND_API_KEY found in environment variables")
     
     def _constant_time_compare(self, a: str, b: str) -> bool:
         """Compare two strings in constant time to prevent timing attacks.
@@ -149,7 +152,7 @@ class SecurityManager:
         
         # Always perform the same operations to prevent timing attacks
         if not is_valid:
-            logger.warning(f"Invalid API key attempted: {x_api_key[:8]}...")
+            logger.warning(f"Invalid API key attempted: {x_api_key[:8] if x_api_key else 'None'}... Expected: {list(self._api_keys.keys())[0][:8] if self._api_keys else 'None'}...")
             # Add delay to make brute force harder
             await asyncio.sleep(0.1)
             raise HTTPException(

@@ -140,8 +140,13 @@ async def chat(
                     "status": "In Progress",  # Using a value that actually works in the database
                     "progress": 0  # Setting progress to 0 for "In Progress" status
                 }
+                logger.info(f"Attempting to create task with data: {task_data}")
                 task_response = supabase_client.table("tasks").insert(task_data).execute()
                 logger.info(f"Task insert response: {task_response}")
+                if not task_response or not task_response.data:
+                    logger.warning("Task creation failed - no data returned from Supabase")
+                    return  # Skip task publishing if creation failed
+                
                 task_id = task_response.data[0]["id"] if task_response and task_response.data else None
                 logger.info(f"Task ID extracted: {task_id}")
                 
@@ -169,7 +174,8 @@ async def chat(
                             }
                         }
                         logger.info(f"Task payload to be published: {task_payload}")
-                        pubnub_client.publish().channel("tasks").message(task_payload).sync()
+                        publish_result = pubnub_client.publish().channel("tasks").message(task_payload).sync()
+                        logger.info(f"Task creation published to PubNub, result: {publish_result}")
                         logger.info("Task creation published to PubNub")
                     except Exception as e:
                         logger.warning(f"Failed to publish task creation to PubNub: {e}")
