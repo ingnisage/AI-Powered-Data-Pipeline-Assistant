@@ -34,7 +34,7 @@ class WorkbenchAPI:
         """Initialize API client.
         
         Args:
-            base_url: Base URL of the backend API (e.g., 'http://localhost:8000')
+            base_url: Base URL of the backend API
         """
         self.base_url = base_url.rstrip('/')
         logger.info(f"Initialized WorkbenchAPI with base URL: {self.base_url}")
@@ -48,6 +48,7 @@ class WorkbenchAPI:
             Tuple of (success, tasks_list, error_message)
         """
         try:
+            logger.info(f"Attempting to fetch tasks from: {self.base_url}/api/tasks/")
             r = requests.get(
                 f"{self.base_url}/api/tasks/",
                 headers={"X-API-Key": API_KEY},
@@ -216,6 +217,7 @@ class WorkbenchAPI:
             Tuple of (success, messages_list, error_message)
         """
         try:
+            logger.info(f"Attempting to fetch chat history from: {self.base_url}/api/chat/chat-history")
             r = requests.get(
                 f"{self.base_url}/api/chat/chat-history",
                 headers={"X-API-Key": API_KEY},
@@ -228,19 +230,29 @@ class WorkbenchAPI:
                 logger.info(f"Successfully fetched {len(messages)} chat messages")
                 return True, messages, None
             else:
-                return False, None, f"HTTP {r.status_code}"
+                error_msg = f"Unexpected status code: {r.status_code}"
+                logger.warning(error_msg)
+                return False, None, error_msg
                 
         except requests.exceptions.ConnectionError:
-            logger.warning(f"Could not connect to backend at {self.base_url} for chat history")
-            return False, None, "Connection error"
+            error_msg = f"Could not connect to backend at {self.base_url} for chat history"
+            logger.warning(error_msg)
+            return False, None, error_msg
             
         except requests.exceptions.Timeout:
-            logger.warning("Chat history fetch request timed out")
-            return False, None, "Timeout"
+            error_msg = "Chat history fetch request timed out"
+            logger.warning(error_msg)
+            return False, None, error_msg
             
         except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to fetch chat history: {e}")
-            return False, None, str(e)
+            error_msg = f"Failed to fetch chat history: {str(e)}"
+            logger.error(error_msg)
+            return False, None, error_msg
+            
+        except (ValueError, KeyError) as e:
+            error_msg = f"Invalid chat history data format: {str(e)}"
+            logger.error(error_msg)
+            return False, None, error_msg
     
     def send_chat_message(
         self,

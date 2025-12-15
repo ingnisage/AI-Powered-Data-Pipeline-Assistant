@@ -126,8 +126,31 @@ st.title("🚀 AI Workbench")
 
 # Determine backend URL - use RENDER environment variable if available, otherwise default to localhost
 RENDER_BACKEND_URL = os.environ.get('RENDER_BACKEND_URL')
-DEFAULT_BACKEND_URL = RENDER_BACKEND_URL if RENDER_BACKEND_URL else "http://localhost:8000"
-API_URL = st.sidebar.text_input("Backend URL", DEFAULT_BACKEND_URL)
+BACKEND_URL_ENV = os.environ.get('BACKEND_URL')  # Alternative environment variable name
+PRODUCTION_BACKEND_URL = RENDER_BACKEND_URL or BACKEND_URL_ENV
+
+if PRODUCTION_BACKEND_URL:
+    DEFAULT_BACKEND_URL = PRODUCTION_BACKEND_URL
+    logger.info(f"Using production backend URL from environment: {PRODUCTION_BACKEND_URL}")
+else:
+    DEFAULT_BACKEND_URL = "http://localhost:8000"
+    logger.info("Using default localhost backend URL")
+
+# Display backend URL information in a more user-friendly way
+st.sidebar.markdown("### 🔌 Backend Connection")
+
+# Show the source of the backend URL
+if PRODUCTION_BACKEND_URL:
+    st.sidebar.info(f"**Production Backend**\n\n`{PRODUCTION_BACKEND_URL}`")
+else:
+    st.sidebar.warning("**Local Development**\n\n`http://localhost:8000`")
+
+# Allow manual override
+API_URL = st.sidebar.text_input("Override Backend URL", DEFAULT_BACKEND_URL, 
+                               help="Manually override the backend URL if needed")
+
+# Log the actual URL being used
+logger.info(f"Backend URL configured as: {API_URL}")
 
 # Performance settings in sidebar
 with st.sidebar.expander("⚙️ Performance Settings"):
@@ -393,20 +416,30 @@ format_time_eastern = MessageFormatter.format_timestamp
 
 # Initial task load using API client
 if not st.session_state.tasks:
+    logger.info("Loading initial tasks...")
     success, tasks, error = st.session_state.api_client.get_tasks()
     if success:
         st.session_state.tasks = TaskManager.deduplicate(tasks)
         st.session_state.tasks_updated_at = time.time()
+        logger.info(f"Loaded {len(st.session_state.tasks)} tasks successfully")
     elif error and "connect" not in error.lower():
         st.warning(f"⚠️ {error}")
-
-# Initial logs load removed as per user request
+        logger.warning(f"Failed to load initial tasks: {error}")
+    else:
+        logger.info("Initial tasks load skipped due to connection issue (will retry)")
 
 # Initial chat history load using API client
 if not st.session_state.messages:
+    logger.info("Loading initial chat history...")
     success, messages, error = st.session_state.api_client.get_chat_history(limit=10)
     if success:
         st.session_state.messages = MessageFormatter.convert_chat_history(messages)
+        logger.info(f"Loaded {len(st.session_state.messages)} chat messages successfully")
+    elif error and "connect" not in error.lower():
+        st.warning(f"⚠️ {error}")
+        logger.warning(f"Failed to load initial chat history: {error}")
+    else:
+        logger.info("Initial chat history load skipped due to connection issue (will retry)")
 
 # =================================== UI ===================================
 tab1, tab2, tab3 = st.tabs(["Chat", "Search", "Tasks"])

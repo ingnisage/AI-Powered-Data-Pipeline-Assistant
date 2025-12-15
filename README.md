@@ -125,6 +125,33 @@ For comprehensive documentation on all aspects of the project, please refer to t
 - Security Additions
 - And much more...
 
+## Deployment
+
+### Local Development
+
+1. Start the backend server:
+   ```bash
+   BACKEND_API_KEY=your-api-key OPENAI_API_KEY=your-openai-key python main.py
+   ```
+
+2. In a separate terminal, start the frontend:
+   ```bash
+   BACKEND_API_KEY=your-api-key streamlit run app/app.py
+   ```
+
+3. Access the application at `http://localhost:8501`
+
+### Production Deployment (Render)
+
+When deploying to Render or other cloud platforms:
+
+1. Set the following environment variables:
+   - `BACKEND_API_KEY` - Your backend API key
+   - `OPENAI_API_KEY` - Your OpenAI API key
+   - `RENDER_BACKEND_URL` or `BACKEND_URL` - Your production backend URL (e.g., `https://your-backend-service.onrender.com`)
+
+2. The frontend will automatically connect to your production backend when these environment variables are set.
+
 ## Contributing
 
 Contributions are welcome! Please follow these steps:
