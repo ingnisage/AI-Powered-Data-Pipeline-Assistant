@@ -55,9 +55,9 @@ class WorkbenchAPI:
             Tuple of (success, tasks_list, error_message)
         """
         try:
-            logger.info(f"Attempting to fetch tasks from: {self.base_url}/api/tasks/")
+            logger.info(f"Attempting to fetch tasks from: {self.base_url}/tasks/")
             r = requests.get(
-                f"{self.base_url}/api/tasks/",
+                f"{self.base_url}/tasks/",
                 headers={"X-API-Key": API_KEY},
                 timeout=config.API_TIMEOUT_SHORT
             )
@@ -97,7 +97,7 @@ class WorkbenchAPI:
         """
         try:
             r = requests.post(
-                f"{self.base_url}/api/tasks/",
+                f"{self.base_url}/tasks/",
                 json={"name": name},
                 headers={"X-API-Key": API_KEY},
                 timeout=config.API_TIMEOUT_TASK_OPS
@@ -160,7 +160,7 @@ class WorkbenchAPI:
             payload = {"status": status, "progress": progress}
             logger.info(f"Updating task {task_id} with payload: {payload}")
             r = requests.patch(
-                f"{self.base_url}/api/tasks/{task_id}",
+                f"{self.base_url}/tasks/{task_id}",
                 json=payload,
                 headers={"X-API-Key": API_KEY},
                 timeout=config.API_TIMEOUT_TASK_OPS
@@ -215,7 +215,7 @@ class WorkbenchAPI:
         """
         try:
             r = requests.get(
-                f"{self.base_url}/api/logs/",
+                f"{self.base_url}/logs/",
                 headers={"X-API-Key": API_KEY},
                 timeout=config.API_TIMEOUT_SHORT
             )
@@ -248,9 +248,9 @@ class WorkbenchAPI:
             Tuple of (success, messages_list, error_message)
         """
         try:
-            logger.info(f"Attempting to fetch chat history from: {self.base_url}/api/chat/chat-history")
+            logger.info(f"Attempting to fetch chat history from: {self.base_url}/chat/chat-history")
             r = requests.get(
-                f"{self.base_url}/api/chat/chat-history",
+                f"{self.base_url}/chat/chat-history",
                 headers={"X-API-Key": API_KEY},
                 timeout=config.API_TIMEOUT_SHORT
             )
@@ -317,7 +317,7 @@ class WorkbenchAPI:
         """
         try:
             response = requests.post(
-                f"{self.base_url}/api/chat/",
+                f"{self.base_url}/chat/",
                 json={
                     "message": message,
                     "system_prompt": system_prompt,
@@ -390,7 +390,7 @@ class WorkbenchAPI:
         """
         try:
             response = requests.post(
-                f"{self.base_url}/api/search/",
+                f"{self.base_url}/search/",
                 json={
                     "query": query,
                     "source": source,
