@@ -192,3 +192,20 @@ class GenerateSQLQueryTool(BaseTool):
                 success=False,
                 error=f"SQL generation failed: {str(e)}"
             )
+
+
+def my_complex_udf(x):
+    """Example UDF that handles division by zero safely."""
+    try:
+        # Check for division by zero condition
+        if x - 10 == 0:
+            # Return a default value or handle the error appropriately
+            return None  # or 0, or float('inf'), depending on your needs
+        return 1 / (x - 10)
+    except ZeroDivisionError:
+        # Handle the division by zero error
+        return None  # or appropriate default value
+    except Exception as e:
+        # Handle any other unexpected errors
+        print(f"Unexpected error in UDF: {e}")
+        return None

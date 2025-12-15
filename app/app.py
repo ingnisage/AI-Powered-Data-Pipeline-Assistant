@@ -124,7 +124,10 @@ st.set_page_config(page_title="AI Workbench - Data Pipeline Assistant", layout="
 
 st.title("🚀 AI Workbench")
 
-API_URL = st.sidebar.text_input("Backend URL", "http://localhost:8000")
+# Determine backend URL - use RENDER environment variable if available, otherwise default to localhost
+RENDER_BACKEND_URL = os.environ.get('RENDER_BACKEND_URL')
+DEFAULT_BACKEND_URL = RENDER_BACKEND_URL if RENDER_BACKEND_URL else "http://localhost:8000"
+API_URL = st.sidebar.text_input("Backend URL", DEFAULT_BACKEND_URL)
 
 # Performance settings in sidebar
 with st.sidebar.expander("⚙️ Performance Settings"):
