@@ -18,6 +18,9 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
+# Load environment variables from .env file
+load_dotenv()
+
 from backend.services.config import config  # Import centralized configuration
 
 from app.api_client import WorkbenchAPI  # Import API client
@@ -27,8 +30,6 @@ try:
     from zoneinfo import ZoneInfo
 except ImportError:  # Python < 3.9 fallback
     ZoneInfo = None
-
-load_dotenv()
 
 # =================================== LOGGING SETUP ===================================
 # Configure logging for better error tracking and debugging
@@ -147,12 +148,25 @@ st.sidebar.markdown(f"**{backend_type}**: `{current_backend_display}`")
 
 # Check if we're using a test API key and warn the user
 API_KEY = os.environ.get("BACKEND_API_KEY", "test-api-key")
-logger.info(f"Backend API Key loaded: {API_KEY[:8]}... (hidden for security)")
-if API_KEY == "test-api-key":
-    st.sidebar.error("⚠️ **Test API Key Detected**\n\nAuthentication may fail. Set `BACKEND_API_KEY` environment variable.")
-    logger.warning("USING TEST API KEY - AUTHENTICATION MAY FAIL")
+ENVIRONMENT = os.environ.get("ENVIRONMENT", "production").lower()
+
+logger.info(f"Backend API Key loaded: {API_KEY[:8] if API_KEY != 'test-api-key' else 'test-key'}... (hidden for security)")
+logger.info(f"Environment mode: {ENVIRONMENT}")
+
+# In development mode, we don't require a valid API key
+if ENVIRONMENT in ["development", "dev", "local"]:
+    logger.info("Development mode: Using relaxed authentication")
+    # In development mode, we can use a placeholder key
+    if API_KEY == "test-api-key":
+        API_KEY = "dev-key-12345"  # Match the default dev key in security.py
+        logger.info("Development mode: Using default dev API key")
 else:
-    logger.info("Using valid backend API key")
+    # In production mode, warn about invalid keys
+    if API_KEY == "test-api-key":
+        st.sidebar.error("⚠️ **Test API Key Detected**\n\nAuthentication may fail. Set `BACKEND_API_KEY` environment variable.")
+        logger.warning("USING TEST API KEY - AUTHENTICATION MAY FAIL")
+    else:
+        logger.info("Using valid backend API key")
 
 # Allow manual override - only show if user wants to change it
 with st.sidebar.expander("⚙️ Advanced Settings"):
@@ -566,7 +580,7 @@ with tab2:
     search_source_map = {
         "StackOverflow": "stackoverflow",
         "GitHub": "github",
-        "Spark Docs": "official_doc"
+        "Spark Docs": "spark_docs"
     }
     search_source = search_source_map.get(search_source_label)
     
@@ -729,7 +743,7 @@ with tab3:
     for task in sorted_tasks:
         task_id = task.get("id")
         task_name = task.get("name", "Unnamed Task")
-        current_status = task.get("status", "Not Started")
+        current_status = task.get("status", "In Progress")
         current_progress = int(task.get("progress", 0) or 0)
 
         # Determine if this expander should be expanded

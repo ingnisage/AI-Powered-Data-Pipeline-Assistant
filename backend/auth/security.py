@@ -26,18 +26,23 @@ class SecurityManager:
     
     def __init__(self):
         """Initialize security manager with rate limiting and key management."""
-        self._api_keys: Dict[str, Dict[str, Any]] = {}
-        self._load_api_keys()
+        # Configuration - Load this first before using it
+        self.max_requests_per_minute = int(os.getenv("MAX_REQUESTS_PER_MINUTE", "60"))
+        self.max_requests_per_hour = int(os.getenv("MAX_REQUESTS_PER_HOUR", "1000"))
+        
+        # Check if we're in development mode - Do this before _load_api_keys
+        env_mode = os.getenv("ENVIRONMENT", "production").lower()
+        self.is_development = env_mode in ["dev", "development", "local"]
         
         # Rate limiting: key -> list of (timestamp, count)
         self._rate_limit_data: Dict[str, list] = defaultdict(list)
         self._rate_limit_lock = Lock()
         
-        # Configuration
-        self.max_requests_per_minute = int(os.getenv("MAX_REQUESTS_PER_MINUTE", "60"))
-        self.max_requests_per_hour = int(os.getenv("MAX_REQUESTS_PER_HOUR", "1000"))
+        # Load API keys after setting up environment detection
+        self._api_keys: Dict[str, Dict[str, Any]] = {}
+        self._load_api_keys()
         
-        logger.info("SecurityManager initialized with rate limiting enabled")
+        logger.info(f"SecurityManager initialized with rate limiting enabled. Env mode: {env_mode}, Dev mode: {self.is_development}")
     
     def _load_api_keys(self) -> None:
         """Load API keys from environment with metadata."""
@@ -53,6 +58,17 @@ class SecurityManager:
                 "rate_limit_tier": "standard"
             }
             logger.info(f"Loaded {len(self._api_keys)} API key(s) from environment")
+        elif self.is_development:
+            # In development mode, create a default key for easy testing
+            default_key = "dev-key-12345"
+            key_hash = hashlib.sha256(default_key.encode()).hexdigest()
+            self._api_keys[key_hash] = {
+                "key": default_key,
+                "created_at": datetime.utcnow(),
+                "permissions": ["read", "write"],
+                "rate_limit_tier": "standard"
+            }
+            logger.info("Development mode: Created default API key for testing")
         else:
             logger.warning("No BACKEND_API_KEY found in environment variables")
     
@@ -128,6 +144,11 @@ class SecurityManager:
         Raises:
             HTTPException: If authentication or rate limiting fails
         """
+        # In development mode, allow requests without API key for easier testing
+        if self.is_development and not x_api_key:
+            logger.info("Development mode: Allowing request without API key")
+            return "dev-default-key"
+        
         # Check if API key is provided
         if not x_api_key:
             logger.warning("API key missing from request")

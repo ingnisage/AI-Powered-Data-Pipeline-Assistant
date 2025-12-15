@@ -30,7 +30,6 @@ class AiWorkbenchConfig:
     
     # Validation rules
     MIN_TASK_NAME_LENGTH: int = 3
-    MAX_TASK_NAME_LENGTH: int = 200
     MAX_MESSAGE_LENGTH: int = 10000
     
     # PubNub settings

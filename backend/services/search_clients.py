@@ -7,11 +7,13 @@ import asyncio
 import hashlib
 import httpx
 import tenacity
-from functools import lru_cache
 from httpx import Limits
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
 from bs4 import BeautifulSoup
+
+# Import async-aware caching decorator
+from backend.utils.caching import cached
 
 # Global rate limiting configuration for all HTTP clients
 GLOBAL_LIMITS = Limits(
@@ -40,7 +42,12 @@ except ImportError:
 def _make_retry_decorator():
     """Create a retry decorator for HTTP requests with exponential backoff."""
     return tenacity.retry(
-        retry=tenacity.retry_if_exception_type(httpx.HTTPStatusError),
+        retry=tenacity.retry_if_exception_type((
+            httpx.HTTPStatusError,
+            httpx.ReadTimeout,
+            httpx.ConnectError,
+            httpx.NetworkError
+        )),
         wait=tenacity.wait_exponential(multiplier=1, min=1, max=10),
         stop=tenacity.stop_after_attempt(3),
         reraise=True,
@@ -83,8 +90,9 @@ class StackOverflowClient:
     @HTTP_RETRY
     async def _fetch_with_retry(self, client: httpx.AsyncClient, url: str, **kwargs) -> httpx.Response:
         """Make HTTP request with automatic retry on transient failures."""
-        return await client.get(url, **kwargs)
-        return html.unescape(text)
+        response = await client.get(url, **kwargs)
+        response.raise_for_status()
+        return response
 
     async def search(self, query: str, max_results: int) -> List[Document]:
         """Asynchronously search StackOverflow with concurrency limits."""
@@ -105,7 +113,6 @@ class StackOverflowClient:
             ) as client:
                 try:
                     resp = await self._fetch_with_retry(client, self.BASE_URL, params=params)
-                    resp.raise_for_status()
                     items = resp.json().get("items", [])
                 except httpx.HTTPError as e:
                     save_log("ERROR", f"StackOverflow API request failed after retries: {e}", source="stackoverflow_client", component="search_client")
@@ -156,7 +163,9 @@ class GitHubClient:
     @HTTP_RETRY
     async def _fetch_with_retry(self, client: httpx.AsyncClient, url: str, **kwargs) -> httpx.Response:
         """Make HTTP request with automatic retry on transient failures."""
-        return await client.get(url, **kwargs)
+        response = await client.get(url, **kwargs)
+        response.raise_for_status()
+        return response
 
     async def search(self, query: str, max_results: int) -> List[Document]:
         """Asynchronously search GitHub (repositories, issues, code) with concurrency limits."""
@@ -186,7 +195,6 @@ class GitHubClient:
                         }
                         
                         r = await self._fetch_with_retry(client, endpoint, params=params)
-                        r.raise_for_status()
                         items = r.json().get("items", [])
                         
                         for item in items:
@@ -250,77 +258,48 @@ class GitHubClient:
         return docs[:max_results]  # Limit total results
 
 class OfficialDocsClient:
-    """Handles simple scraping of official documentation search results with rate limiting and retries."""
+    """Handles simple scraping of official documentation search results with rate limiting and retries.
+    
+    NOTE: This client returns placeholder results. In a production environment, 
+    this would use a proper documentation search API."""
     
     _semaphore = asyncio.Semaphore(4)  # Max 4 concurrent doc scraping requests
     
-    @HTTP_RETRY
-    async def _fetch_with_retry(self, client: httpx.AsyncClient, url: str, **kwargs) -> httpx.Response:
-        """Make HTTP GET request with automatic retry on transient failures."""
-        return await client.get(url, **kwargs)
-    
-    @HTTP_RETRY
-    async def _post_with_retry(self, client: httpx.AsyncClient, url: str, **kwargs) -> httpx.Response:
-        """Make HTTP POST request with automatic retry on transient failures."""
-        return await client.post(url, **kwargs)
-    
-    async def _fetch_snippet_async(self, url: str, client: httpx.AsyncClient) -> str:
-        """Asynchronously fetch and clean a page snippet using httpx with retries."""
-        try:
-            r = await self._fetch_with_retry(client, url, timeout=8, follow_redirects=True)
-            r.raise_for_status()
-            soup = BeautifulSoup(r.text, "html.parser")
-            # Kill scripts/style + get clean text
-            for tag in soup(["script", "style", "nav", "header", "footer"]):
-                tag.decompose()
-            text = soup.get_text(separator=" ", strip=True)
-            return html.unescape(text[:1500])  # Slightly longer = better context
-        except Exception as e:
-            save_log("WARNING", f"Failed to fetch snippet from {url}: {e}", component="snippet")
-            return "[Page could not be loaded]"
-
     async def search(self, query: str, max_results: int) -> List[Document]:
         """Asynchronously search docs with rate limiting."""
         async with self._semaphore:  # Enforce max 4 concurrent doc scraping ops
             docs: List[Document] = []
             
-            async with httpx.AsyncClient(
-                timeout=10,
-                limits=GLOBAL_LIMITS,
-                headers={"User-Agent": USER_AGENT}
-            ) as client:
-                try:
-                    # For Spark-specific queries, use placeholder approach
-                    if "spark" in query.lower():
-                        # Simple placeholder approach for Spark docs with unique URL
-                        import hashlib
-                        query_hash = hashlib.md5(query.encode()).hexdigest()[:8]
-                        content = f"Apache Spark documentation related to: {query}\n\nThis is a placeholder result. In a production environment, this would contain actual Spark documentation content."
-                        docs.append(Document(
-                            content=content,
-                            title=f"Apache Spark Documentation: {query}",
-                            source_type="official_doc",
-                            source_url=f"https://spark.apache.org/docs/result-{query_hash}.html",
-                            metadata={},
-                        ))
-                    else:
-                        # Generic documentation search - return a placeholder document with unique URL
-                        # In a production environment, this would use a proper search API
-                        import hashlib
-                        query_hash = hashlib.md5(query.encode()).hexdigest()[:8]
-                        content = f"Documentation related to: {query}\n\nThis is a placeholder result. In a production environment, this would contain actual documentation content from various sources."
-                        docs.append(Document(
-                            content=content,
-                            title=f"Documentation Result: {query}",
-                            source_type="official_doc",
-                            source_url=f"https://example.com/docs/{query_hash}",
-                            metadata={},
-                        ))
+            try:
+                # For Spark-specific queries, use placeholder approach
+                if "spark" in query.lower():
+                    # Simple placeholder approach for Spark docs with unique URL
+                    import hashlib
+                    query_hash = hashlib.md5(query.encode()).hexdigest()[:8]
+                    content = f"Apache Spark documentation related to: {query}\n\nThis is a placeholder result. In a production environment, this would contain actual Spark documentation content."
+                    docs.append(Document(
+                        content=content,
+                        title=f"Apache Spark Documentation: {query}",
+                        source_type="spark_docs",
+                        source_url=f"https://spark.apache.org/docs/result-{query_hash}.html",
+                        metadata={},
+                    ))
+                else:
+                    # Generic documentation search - return a placeholder document with unique URL
+                    # In a production environment, this would use a proper search API
+                    import hashlib
+                    query_hash = hashlib.md5(query.encode()).hexdigest()[:8]
+                    content = f"Documentation related to: {query}\n\nThis is a placeholder result. In a production environment, this would contain actual documentation content from various sources."
+                    docs.append(Document(
+                        content=content,
+                        title=f"Documentation Result: {query}",
+                        source_type="official_doc",
+                        source_url=f"https://example.com/docs/{query_hash}",
+                        metadata={},
+                    ))
 
-                except httpx.HTTPError as e:
-                    save_log("ERROR", f"Official docs search failed (HTTP): {e}", source="docs_client", component="search_client")
-                except Exception as e:
-                    save_log("ERROR", f"Official docs search failed (Generic): {e}", source="docs_client", component="search_client")
+            except Exception as e:
+                save_log("ERROR", f"Official docs search failed: {e}", source="docs_client", component="search_client")
 
         return docs
 
@@ -340,7 +319,7 @@ _github_client = GitHubClient()
 _official_docs_client = OfficialDocsClient()
 
 
-@lru_cache(maxsize=512)
+@cached(namespace="search", ttl=300)
 async def search_stackoverflow_cached(query: str, max_results: int = 5) -> tuple:
     """
     Cached wrapper for StackOverflow search.
@@ -350,10 +329,11 @@ async def search_stackoverflow_cached(query: str, max_results: int = 5) -> tuple
     """
     docs = await _stackoverflow_client.search(query, max_results)
     # Convert Document objects to tuples for caching
-    return tuple((d.content, d.title, d.source_type, d.source_url, str(d.metadata)) for d in docs)
+    import json
+    return tuple((d.content, d.title, d.source_type, d.source_url, json.dumps(d.metadata)) for d in docs)
 
 
-@lru_cache(maxsize=512)
+@cached(namespace="search", ttl=300)
 async def search_github_cached(query: str, max_results: int = 5) -> tuple:
     """
     Cached wrapper for GitHub search.
@@ -363,10 +343,11 @@ async def search_github_cached(query: str, max_results: int = 5) -> tuple:
     """
     docs = await _github_client.search(query, max_results)
     # Convert Document objects to tuples for caching
-    return tuple((d.content, d.title, d.source_type, d.source_url, str(d.metadata)) for d in docs)
+    import json
+    return tuple((d.content, d.title, d.source_type, d.source_url, json.dumps(d.metadata)) for d in docs)
 
 
-@lru_cache(maxsize=512)
+@cached(namespace="search", ttl=300)
 async def search_official_docs_cached(query: str, max_results: int = 5) -> tuple:
     """
     Cached wrapper for Official Docs search.
@@ -376,7 +357,8 @@ async def search_official_docs_cached(query: str, max_results: int = 5) -> tuple
     """
     docs = await _official_docs_client.search(query, max_results)
     # Convert Document objects to tuples for caching
-    return tuple((d.content, d.title, d.source_type, d.source_url, str(d.metadata)) for d in docs)
+    import json
+    return tuple((d.content, d.title, d.source_type, d.source_url, json.dumps(d.metadata)) for d in docs)
 
 
 def _convert_cached_tuple_to_documents(cached_tuple: tuple) -> List[Document]:
@@ -401,16 +383,18 @@ def _convert_cached_tuple_to_documents(cached_tuple: tuple) -> List[Document]:
 # Cache statistics helper (for monitoring)
 def get_cache_info() -> Dict[str, Any]:
     """Get cache statistics for all cached search functions."""
+    # Get global cache stats since individual decorated functions don't expose cache info
+    from backend.utils.caching import get_cache
+    cache = get_cache()
     return {
-        "stackoverflow": search_stackoverflow_cached.cache_info(),
-        "github": search_github_cached.cache_info(),
-        "official_docs": search_official_docs_cached.cache_info(),
+        "global_cache_stats": cache.get_stats()
     }
 
 
 def clear_all_caches():
     """Clear all search result caches."""
-    search_stackoverflow_cached.cache_clear()
-    search_github_cached.cache_clear()
-    search_official_docs_cached.cache_clear()
+    # Clear the search namespace in the global cache
+    from backend.utils.caching import get_cache
+    cache = get_cache()
+    cache.clear(namespace="search")
     save_log("INFO", "All search caches cleared", component="cache")

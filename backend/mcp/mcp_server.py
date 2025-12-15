@@ -61,6 +61,7 @@ class AIToolboxMCPServer:
     - initialize(): return a list of Tool-like objects (or dicts in fallback).
     - handle_tool_call(tool_name, arguments): perform the operation and return
       a list of TextContent-like objects.
+
     - handle_request(payload): minimal dispatcher compatible with main.py's
       simple usage; accepts dict payloads used by lightweight clients.
     """
@@ -109,7 +110,7 @@ class AIToolboxMCPServer:
                         },
                         "source": {
                             "type": "string",
-                            "enum": ["all", "stackoverflow", "github", "official_doc"],
+                            "enum": ["all", "stackoverflow", "github", "official_doc", "spark_docs"],
                             "default": "all",
                         },
                         "max_results": {
@@ -202,8 +203,8 @@ class AIToolboxMCPServer:
                 # Use the search service to perform the search
                 result = await self.search_service.smart_search(
                     query=validated_args.query,
-                    context=validated_args.source,
-                    max_total_results=validated_args.max_results
+                    source=validated_args.source,  # <- pass source, not context
+                    max_results=validated_args.max_results
                 )
                 text = json.dumps(result, indent=2)
                 return [TextContent(type="text", text=text)]
@@ -219,7 +220,7 @@ class AIToolboxMCPServer:
                 task_data = {
                     "name": validated_args.name,
                     "description": validated_args.description,
-                    "status": "Not Started",
+                    "status": "In Progress",
                     "progress": 0,
                     "priority": validated_args.priority.capitalize(),
                 }

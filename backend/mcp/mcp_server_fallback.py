@@ -67,7 +67,7 @@ class AIToolboxMCPServer:
                         },
                         "source": {
                             "type": "string",
-                            "enum": ["all", "stackoverflow", "github", "official_doc"],
+                            "enum": ["all", "stackoverflow", "github", "official_doc", "spark_docs"],
                             "default": "all",
                         },
                         "max_results": {
@@ -198,8 +198,8 @@ class AIToolboxMCPServer:
                 
                 # Validate optional arguments with defaults
                 source = arguments.get("source", "all")
-                if source not in ["all", "stackoverflow", "github", "official_doc"]:
-                    return [TextContent(type="text", text="Error: 'source' must be one of: all, stackoverflow, github, official_doc")]
+                if source not in ["all", "stackoverflow", "github", "official_doc", "spark_docs"]:
+                    return [TextContent(type="text", text="Error: 'source' must be one of: all, stackoverflow, github, official_doc, spark_docs")]
                 
                 max_results = arguments.get("max_results", 5)
                 if not isinstance(max_results, int) or max_results < 1 or max_results > 10:
@@ -209,8 +209,8 @@ class AIToolboxMCPServer:
                 try:
                     result = await search_service.smart_search(
                         query=query.strip(),
-                        context=source,
-                        max_total_results=max_results
+                        source=source,  # <- pass source, not context
+                        max_results=max_results
                     )
                     return [TextContent(type="text", text=json.dumps(result, indent=2))]
                 except Exception as e:
@@ -246,7 +246,7 @@ class AIToolboxMCPServer:
                     task_data = {
                         "name": name.strip(),
                         "description": description,
-                        "status": "Not Started",
+                        "status": "In Progress",
                         "progress": 0,
                         "priority": priority.capitalize(),
                     }

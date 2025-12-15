@@ -132,30 +132,34 @@ class VectorStoreService:
             save_log("ERROR", f"Failed to save to knowledge_base: {e}", source="vector_service", component="upsert")
             return {"error": str(e), "results": []}
 
-        # Return simplified results for the caller
-        results = [{"title": r["title"], "url": r["source_url"], "score": r.get("metadata", {}).get("score")} for r in rows]
+        # Return results with data from Supabase response when available
+        if result.data:
+            # Use Supabase response data for more accurate results
+            results = [
+                {
+                    "id": r.get("id"),
+                    "title": r.get("title"), 
+                    "url": r.get("source_url"), 
+                    "score": r.get("metadata", {}).get("score"),
+                    "content_hash": r.get("content_hash")
+                } 
+                for r in result.data
+            ]
+        else:
+            # Fallback to input-derived results if no data from Supabase
+            results = [
+                {
+                    "title": r["title"], 
+                    "url": r["source_url"], 
+                    "score": r.get("metadata", {}).get("score")
+                } 
+                for r in rows
+            ]
         
         return {"results": results, "message": f"Cached {len(rows)} docs into knowledge_base."}
-    
-    def upsert_documents(self, docs: List['Document'], dry_run: bool = False) -> Dict[str, Any]:
-        """Synchronous wrapper: Generate embeddings and upsert documents.
-        
-        Args:
-            docs: List of Document objects to upsert
-            dry_run: If True, return what would be upserted without actually saving
-            
-        Returns:
-            Dict with 'results' and 'message' keys
-        """
-        if dry_run:
-            save_log("INFO", f"[DRY RUN] Would upsert {len(docs)} documents", 
-                     source="vector_service", component="upsert")
-            return {
-                "results": [{"title": d.title, "url": d.source_url} for d in docs],
-                "message": f"[DRY RUN] Would have upserted {len(docs)} docs"
-            }
-        
-        return asyncio.run(self._upsert_impl_async(docs))
+
+    # Removed synchronous wrapper to avoid asyncio.run() issues in event loops
+    # Use upsert_documents_async() instead
     
     async def upsert_documents_async(self, docs: List['Document'], dry_run: bool = False) -> Dict[str, Any]:
         """Asynchronous version: Generate embeddings and upsert documents.

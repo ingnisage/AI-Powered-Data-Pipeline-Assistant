@@ -14,6 +14,9 @@ __pycache__/
 *.pyo
 *.pyd
 .python-version
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Log files
 *.log
@@ -27,7 +30,8 @@ __pycache__/
 
 # Dependencies and builds
 venv/
-env/
+.venv/
+.env/
 dist/
 build/
 *.egg-info/

@@ -8,6 +8,7 @@ import logging
 import hashlib
 import json
 import time
+import threading
 from typing import Any, Optional, Callable, Dict
 from functools import wraps
 from datetime import datetime, timedelta
@@ -63,6 +64,7 @@ class InMemoryCache:
         self.default_ttl = default_ttl
         self._hits = 0
         self._misses = 0
+        self._lock = threading.RLock()  # Reentrant lock for thread safety
         logger.info(f"InMemoryCache initialized with default TTL: {default_ttl}s")
     
     def _make_key(self, namespace: str, key: str) -> str:
@@ -88,22 +90,24 @@ class InMemoryCache:
             Cached value or None if not found/expired
         """
         full_key = self._make_key(namespace, key)
-        entry = self._cache.get(full_key)
         
-        if entry is None:
-            self._misses += 1
-            logger.debug(f"Cache miss: {full_key}")
-            return None
-        
-        if entry.is_expired():
-            self._misses += 1
-            del self._cache[full_key]
-            logger.debug(f"Cache expired: {full_key}")
-            return None
-        
-        self._hits += 1
-        logger.debug(f"Cache hit: {full_key} (age: {entry.get_age_seconds():.1f}s)")
-        return entry.value
+        with self._lock:
+            entry = self._cache.get(full_key)
+            
+            if entry is None:
+                self._misses += 1
+                logger.debug(f"Cache miss: {full_key}")
+                return None
+            
+            if entry.is_expired():
+                self._misses += 1
+                del self._cache[full_key]
+                logger.debug(f"Cache expired: {full_key}")
+                return None
+            
+            self._hits += 1
+            logger.debug(f"Cache hit: {full_key} (age: {entry.get_age_seconds():.1f}s)")
+            return entry.value
     
     def set(
         self,
@@ -123,8 +127,9 @@ class InMemoryCache:
         full_key = self._make_key(namespace, key)
         ttl_seconds = ttl if ttl is not None else self.default_ttl
         
-        self._cache[full_key] = CacheEntry(value, ttl_seconds)
-        logger.debug(f"Cache set: {full_key} (TTL: {ttl_seconds}s)")
+        with self._lock:
+            self._cache[full_key] = CacheEntry(value, ttl_seconds)
+            logger.debug(f"Cache set: {full_key} (TTL: {ttl_seconds}s)")
     
     def delete(self, namespace: str, key: str) -> bool:
         """Delete value from cache.
@@ -137,11 +142,13 @@ class InMemoryCache:
             True if deleted, False if not found
         """
         full_key = self._make_key(namespace, key)
-        if full_key in self._cache:
-            del self._cache[full_key]
-            logger.debug(f"Cache deleted: {full_key}")
-            return True
-        return False
+        
+        with self._lock:
+            if full_key in self._cache:
+                del self._cache[full_key]
+                logger.debug(f"Cache deleted: {full_key}")
+                return True
+            return False
     
     def clear(self, namespace: Optional[str] = None) -> int:
         """Clear cache entries.
@@ -152,20 +159,21 @@ class InMemoryCache:
         Returns:
             Number of entries cleared
         """
-        if namespace is None:
-            count = len(self._cache)
-            self._cache.clear()
-            logger.info(f"Cache cleared: {count} entries")
-            return count
-        
-        # Clear specific namespace
-        prefix = f"{namespace}:"
-        keys_to_delete = [k for k in self._cache.keys() if k.startswith(prefix)]
-        for key in keys_to_delete:
-            del self._cache[key]
-        
-        logger.info(f"Cache namespace '{namespace}' cleared: {len(keys_to_delete)} entries")
-        return len(keys_to_delete)
+        with self._lock:
+            if namespace is None:
+                count = len(self._cache)
+                self._cache.clear()
+                logger.info(f"Cache cleared: {count} entries")
+                return count
+            
+            # Clear specific namespace
+            prefix = f"{namespace}:"
+            keys_to_delete = [k for k in self._cache.keys() if k.startswith(prefix)]
+            for key in keys_to_delete:
+                del self._cache[key]
+            
+            logger.info(f"Cache namespace '{namespace}' cleared: {len(keys_to_delete)} entries")
+            return len(keys_to_delete)
     
     def cleanup_expired(self) -> int:
         """Remove expired entries from cache.
@@ -173,18 +181,19 @@ class InMemoryCache:
         Returns:
             Number of entries removed
         """
-        expired_keys = [
-            key for key, entry in self._cache.items()
-            if entry.is_expired()
-        ]
-        
-        for key in expired_keys:
-            del self._cache[key]
-        
-        if expired_keys:
-            logger.info(f"Cleaned up {len(expired_keys)} expired cache entries")
-        
-        return len(expired_keys)
+        with self._lock:
+            expired_keys = [
+                key for key, entry in self._cache.items()
+                if entry.is_expired()
+            ]
+            
+            for key in expired_keys:
+                del self._cache[key]
+            
+            if expired_keys:
+                logger.info(f"Cleaned up {len(expired_keys)} expired cache entries")
+            
+            return len(expired_keys)
     
     def get_stats(self) -> Dict[str, Any]:
         """Get cache statistics.
@@ -192,16 +201,17 @@ class InMemoryCache:
         Returns:
             Dictionary with cache stats
         """
-        total_requests = self._hits + self._misses
-        hit_rate = (self._hits / total_requests * 100) if total_requests > 0 else 0
-        
-        return {
-            "size": len(self._cache),
-            "hits": self._hits,
-            "misses": self._misses,
-            "total_requests": total_requests,
-            "hit_rate_percent": round(hit_rate, 2)
-        }
+        with self._lock:
+            total_requests = self._hits + self._misses
+            hit_rate = (self._hits / total_requests * 100) if total_requests > 0 else 0
+            
+            return {
+                "size": len(self._cache),
+                "hits": self._hits,
+                "misses": self._misses,
+                "total_requests": total_requests,
+                "hit_rate_percent": round(hit_rate, 2)
+            }
 
 
 # Global cache instance

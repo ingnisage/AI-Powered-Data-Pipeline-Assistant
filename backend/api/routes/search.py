@@ -8,18 +8,14 @@ from typing import Optional
 
 from backend.models.interaction import SearchRequest
 from backend.auth.security import verify_api_key_dependency
-from backend.core.dependencies import get_openai_client, get_supabase_client
-
-# Import the new search service
-from backend.services.search_service import SearchService
+from backend.core.dependencies import get_search_service
 
 router = APIRouter(prefix="/search", tags=["search"])
 
 @router.post("/", dependencies=[Depends(verify_api_key_dependency)])
 async def search_endpoint(
     request: SearchRequest,
-    openai_client = Depends(get_openai_client),
-    supabase_client = Depends(get_supabase_client)
+    search_service = Depends(get_search_service)
 ):
     """Perform search across knowledge sources.
     
@@ -30,14 +26,11 @@ async def search_endpoint(
         Dictionary with search results and metadata
     """
     try:
-        # Initialize search service
-        search_service = SearchService(openai_client, supabase_client)
-        
         # Perform smart search
         results = await search_service.smart_search(
             query=request.query,
             source=request.source,
-            max_results=request.max_results or 3
+            max_total_results=request.max_results or 3
         )
         
         return results

@@ -32,7 +32,7 @@ class SearchKnowledgeArgs(BaseModel):
     @validator('source')
     def validate_source(cls, v):
         """Validate source is one of the allowed values"""
-        allowed_sources = ["all", "stackoverflow", "github", "official_doc"]
+        allowed_sources = ["all", "stackoverflow", "github", "official_doc", "spark_docs"]
         if v not in allowed_sources:
             raise ValueError(f"Source must be one of {allowed_sources}")
         return v

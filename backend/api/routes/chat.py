@@ -32,7 +32,7 @@ def publish_fn(channel: str, data: Dict[str, Any]) -> None:
     """Mock publish function for testing."""
     logger.debug(f"Publishing to channel {channel}: {data}")
 
-@router.get("/chat-history", response_model=ChatHistoryResponse)
+@router.get("/chat-history", response_model=ChatHistoryResponse, dependencies=[Depends(verify_api_key_dependency)])
 async def get_chat_history(limit: int = 10, supabase_client = Depends(get_supabase_client)):
     """Get chat history from database."""
     try:

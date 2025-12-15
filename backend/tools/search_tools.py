@@ -45,7 +45,7 @@ class SmartSearchTool(BaseTool):
             )
         
         try:
-            # Map context to source if needed
+            # Map context to source if needed (maintain backward compatibility)
             if source is None and context != "all":
                 source_mapping = {
                     "error": "stackoverflow",
@@ -53,13 +53,13 @@ class SmartSearchTool(BaseTool):
                     "documentation": "official_doc",
                     "best_practice": "official_doc"
                 }
-                source = source_mapping.get(context, "all")
+                source = source_mapping.get(context)
             
-            # Execute search using search service
+            # Execute search using search service with correct parameter names
             results = await self.search_service.smart_search(
                 query=query,
                 source=source or "all",
-                max_results=max_total_results
+                max_results=max_total_results  # Map max_total_results to max_results
             )
             
             data = {

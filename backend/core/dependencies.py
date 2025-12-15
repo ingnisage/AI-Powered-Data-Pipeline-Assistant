@@ -202,11 +202,11 @@ class ServiceContainer:
         if self._search_service is None:
             try:
                 # Import here to avoid circular dependencies
-                from backend.services.search_engine import SearchService
+                from backend.services.search_adapter import SearchAdapter
                 # Get the required clients
                 openai_client = self.get_openai_client()
                 supabase_client = self.get_supabase_client()
-                self._search_service = SearchService(openai_client, supabase_client)
+                self._search_service = SearchAdapter(openai_client, supabase_client)
                 logger.info("Search service initialized")
             except Exception as e:
                 logger.error(f"Failed to initialize search service: {e}", exc_info=True)

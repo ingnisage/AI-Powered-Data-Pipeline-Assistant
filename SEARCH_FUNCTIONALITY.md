@@ -40,7 +40,7 @@ The knowledge base is stored in a Supabase table with pgvector extension:
   - `title`: Document title
 
 ### API Endpoints
-- **POST `/api/search/`**: Main search endpoint
+- **POST `/search/`**: Main search endpoint
   - Parameters: query, source, max_results
   - Returns: Formatted search results with metadata
 
@@ -53,7 +53,7 @@ The knowledge base is stored in a Supabase table with pgvector extension:
 
 ### API Usage
 ```bash
-curl -X POST http://localhost:8000/api/search/ \
+curl -X POST http://localhost:8000/search/ \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-api-key" \
   -d '{
@@ -71,10 +71,15 @@ curl -X POST http://localhost:8000/api/search/ \
 5. View results with expandable details
 
 ## Testing
-Several test scripts are available:
+Currently, comprehensive test suites are not included in this submission. To implement proper testing, the following test files would be recommended:
 - `test_search.py`: Basic search functionality test
 - `test_vector_search.py`: Comprehensive test with vector database integration
 - `test_api_endpoints.py`: Direct API endpoint testing
+
+These tests would include:
+- Unit tests for query preprocessing and caching behavior
+- Integration tests for /search and /chat endpoints (with mocked external HTTP and OpenAI)
+- Vector upsert tests with Supabase mocked
 
 ## Future Improvements
 1. Enhanced caching mechanisms

@@ -20,7 +20,9 @@ import tenacity
 from backend.utils.logging_sanitizer import sanitize_log_message
 from .exceptions import handle_exception, ProcessingError, NetworkError, ServiceInitializationError
 from .retry import retry_with_backoff, API_RETRY_CONFIG
-from .monitoring import monitored_operation, performance_counters
+from .monitoring import monitored_operation
+from backend.core.performance_monitoring import performance_counters
+from backend.services.config import config
 from .resource_manager import resource_manager
 
 logger = logging.getLogger(__name__)
@@ -138,7 +140,7 @@ class JobProcessor:
 Provide helpful, accurate information about the job based on the context provided. Be concise"""
             
             completion = self.openai_client.chat.completions.create(
-                model="gpt-4o",
+                model=config.FALLBACK_MODEL,  # Use centralized config
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_query}
@@ -202,6 +204,7 @@ Provide helpful, accurate information about the job based on the context provide
         Returns:
             Dictionary containing the response reference
         """
+
         with monitored_operation("job_processor.process_job_request", 
                                {"job_id": message.get('job_id'), "request_id": message.get('request_id')},
                                self.supabase_client):

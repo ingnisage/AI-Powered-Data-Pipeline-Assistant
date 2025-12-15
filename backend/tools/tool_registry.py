@@ -53,10 +53,6 @@ class ToolDefinition:
             "function": {
                 "name": self.name,
                 "description": self.description,
-                "metadata": {
-                    "required_role": self.required_role.value,
-                    "category": self.category.value
-                },
                 "parameters": {
                     "type": "object",
                     "properties": self.parameters,
@@ -218,7 +214,7 @@ class ToolRegistry:
                 "source": {
                     "type": "string",
                     "description": "Optional: restrict search to a single source",
-                    "enum": ["github", "stackoverflow", "official_doc"]
+                    "enum": ["github", "stackoverflow", "official_doc", "spark_docs"]
                 },
                 "max_total_results": {
                     "type": "integer",

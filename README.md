@@ -29,6 +29,8 @@ The AI-Powered Data Pipeline Assistant is a comprehensive tool that combines AI 
 - **Task Management**: Track and manage data pipeline tasks
 - **Log Analysis**: Analyze logs to identify issues and patterns
 - **Search Functionality**: Search across knowledge bases for solutions
+  - StackOverflow and GitHub: Real API integrations
+  - Official Documentation and Spark Docs: Placeholder implementations (see note below)
 - **Responsive Web Interface**: User-friendly Streamlit interface
 
 ## Architecture
@@ -74,23 +76,56 @@ The system follows a modular architecture with the following components:
 
 Set the following environment variables:
 
-- `BACKEND_API_KEY`: Authentication key for backend access
+- `ENVIRONMENT`: Set to "development" for local testing (allows requests without API key), or "production" for strict authentication
+- `BACKEND_API_KEY`: Authentication key for backend access (required in production)
 - `OPENAI_API_KEY`: OpenAI API key for AI assistance
 - `SUPABASE_URL`: Supabase project URL
 - `SUPABASE_KEY`: Supabase project key
 - `PUBNUB_PUBLISH_KEY`: PubNub publish key
 - `PUBNUB_SUBSCRIBE_KEY`: PubNub subscribe key
 
+### Supabase Setup
+
+To use the vector search functionality, you need to:
+
+1. Enable the pgvector extension in your Supabase project
+2. Run the SQL scripts in the `Supabase/` directory to create the necessary tables and functions:
+   - `knowledge_base-RAG.sql`: Creates the knowledge base table with vector support and RPC functions
+   - `tasks.sql`: Creates the tasks table
+   - `chat_history.sql`: Creates the chat history table
+   - Other SQL files for additional features
+
+The vector search functionality requires:
+- pgvector extension enabled
+- A `knowledge_base` table with a `VECTOR(1536)` column for embeddings
+- RPC functions for vector similarity search
+
 ### Running the Application
+
+#### Local Development (Easy Testing Mode)
+For local development, the system automatically enables a development mode that allows requests without an API key:
 
 1. Start the backend server:
    ```bash
-   BACKEND_API_KEY=your-api-key OPENAI_API_KEY=your-openai-key python main.py
+   ENVIRONMENT=development OPENAI_API_KEY=your-openai-key python main.py
    ```
 
 2. In a separate terminal, start the frontend:
    ```bash
-   BACKEND_API_KEY=your-api-key streamlit run app/app.py
+   ENVIRONMENT=development streamlit run app/app.py
+   ```
+
+#### Production Mode (Strict Authentication)
+For production deployment, you must provide a valid API key:
+
+1. Start the backend server:
+   ```bash
+   ENVIRONMENT=production BACKEND_API_KEY=your-api-key OPENAI_API_KEY=your-openai-key python main.py
+   ```
+
+2. In a separate terminal, start the frontend:
+   ```bash
+   ENVIRONMENT=production BACKEND_API_KEY=your-api-key streamlit run app/app.py
    ```
 
 3. Access the application at `http://localhost:8501`
@@ -107,10 +142,10 @@ Set the following environment variables:
 
 The backend provides a REST API with the following endpoints:
 
-- `/api/chat/` - Chat with the AI assistant
-- `/api/tasks/` - Manage tasks
-- `/api/logs/` - Access log data
-- `/api/search/` - Search knowledge bases
+- `/chat/` - Chat with the AI assistant
+- `/tasks/` - Manage tasks
+- `/logs/` - Access log data
+- `/search/` - Search knowledge bases
 
 Detailed API documentation is available when the backend server is running at `/docs`.
 
@@ -146,11 +181,25 @@ For comprehensive documentation on all aspects of the project, please refer to t
 When deploying to Render or other cloud platforms:
 
 1. Set the following environment variables:
+   - `ENVIRONMENT` - Set to "production" for strict authentication
    - `BACKEND_API_KEY` - Your backend API key
    - `OPENAI_API_KEY` - Your OpenAI API key
    - `RENDER_BACKEND_URL` or `BACKEND_URL` - Your production backend URL (e.g., `https://your-backend-service.onrender.com`)
 
 2. The frontend will automatically connect to your production backend when these environment variables are set.
+
+## Packaging for Submission
+
+To create a clean package for submission that excludes the virtual environment and other unnecessary files:
+
+1. Run the packaging script:
+   ```bash
+   ./package_for_submission.sh
+   ```
+
+2. This will create a `capstone_submission.zip` file in the parent directory that contains only the essential project files.
+
+This approach ensures that large binary files from the virtual environment (like `_rust.abi3.so`, `_pydantic_core.cpython-311-darwin.so`, etc.) are not included in your submission.
 
 ## Contributing
 
@@ -165,3 +214,15 @@ Contributions are welcome! Please follow these steps:
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Search Functionality Note
+
+The search functionality includes both real API integrations and placeholder implementations:
+
+- **StackOverflow and GitHub**: These sources use real APIs (StackExchange API and GitHub API) to fetch actual content.
+- **Official Documentation and Spark Docs**: These sources currently return placeholder results with unique URLs. In a production environment, these would be replaced with actual documentation search APIs or web scrapers.
+
+To implement real documentation search, you would need to:
+1. Replace the placeholder logic in `backend/services/search_clients.py` in the `OfficialDocsClient` class
+2. Add proper API integrations or web scraping logic
+3. Update the source type handling in the search service

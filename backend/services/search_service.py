@@ -10,7 +10,7 @@ from typing import List, Dict, Any, Optional
 from fastapi import HTTPException
 
 # Import the search clients and vector service
-from backend.services.search_clients import StackOverflowClient, GitHubClient, OfficialDocsClient, Document
+from backend.services.search_clients import StackOverflowClient, GitHubClient, OfficialDocsClient, Document, search_stackoverflow_cached, search_github_cached, search_official_docs_cached, _convert_cached_tuple_to_documents
 from backend.services.vector_service import VectorStoreService
 from backend.utils.query_processing import preprocess_search_query
 
@@ -48,7 +48,8 @@ class SearchService:
             List of Document objects
         """
         try:
-            docs = await self.so_client.search(query, max_results)
+            cached_results = await search_stackoverflow_cached(query, max_results)
+            docs = _convert_cached_tuple_to_documents(cached_results)
             logger.info(f"Found {len(docs)} StackOverflow results for query: {query[:50]}...")
             return docs
         except Exception as e:
@@ -66,7 +67,8 @@ class SearchService:
             List of Document objects
         """
         try:
-            docs = await self.gh_client.search(query, max_results)
+            cached_results = await search_github_cached(query, max_results)
+            docs = _convert_cached_tuple_to_documents(cached_results)
             logger.info(f"Found {len(docs)} GitHub results for query: {query[:50]}...")
             return docs
         except Exception as e:
@@ -86,7 +88,8 @@ class SearchService:
         try:
             # Modify query to specifically target Spark documentation
             spark_query = f"spark {query}"
-            docs = await self.docs_client.search(spark_query, max_results)
+            cached_results = await search_official_docs_cached(spark_query, max_results)
+            docs = _convert_cached_tuple_to_documents(cached_results)
             logger.info(f"Found {len(docs)} Spark docs results for query: {query[:50]}...")
             return docs
         except Exception as e:
@@ -104,7 +107,8 @@ class SearchService:
             List of Document objects
         """
         try:
-            docs = await self.docs_client.search(query, max_results)
+            cached_results = await search_official_docs_cached(query, max_results)
+            docs = _convert_cached_tuple_to_documents(cached_results)
             logger.info(f"Found {len(docs)} official docs results for query: {query[:50]}...")
             return docs
         except Exception as e:
@@ -152,7 +156,8 @@ class SearchService:
                 tasks = [
                     self.search_stackoverflow(processed_query, max_results),
                     self.search_github(processed_query, max_results),
-                    self.search_official_docs(processed_query, max_results)
+                    self.search_official_docs(processed_query, max_results),
+                    self.search_spark_docs(processed_query, max_results)
                 ]
                 results = await asyncio.gather(*tasks, return_exceptions=True)
                 
@@ -251,9 +256,18 @@ class SearchService:
             if source:
                 query_builder = query_builder.eq("source_type", source)
             
-            # Perform vector similarity search
+            # Perform vector similarity search using RPC function
             # Note: This assumes pgvector extension is installed and configured
-            response = query_builder.select("*").limit(max_results).execute()
+            rpc_params = {
+                'query_embedding': query_embedding,
+                'match_count': max_results
+            }
+            
+            # Add source filter if specified
+            if source:
+                rpc_params['filter_source'] = source
+            
+            response = self.vector_service.supabase.rpc('match_documents', rpc_params).execute()
             
             # Format results
             results = []
@@ -264,7 +278,7 @@ class SearchService:
                         "url": item.get("source_url", ""),
                         "source": item.get("source_type", ""),
                         "content": item.get("content", "")[:500] + "..." if len(item.get("content", "")) > 500 else item.get("content", ""),
-                        "similarity_score": item.get("similarity_score", 0)  # This would need to be calculated
+                        "similarity_score": item.get("similarity", 0)  # Cosine similarity from pgvector
                     })
             
             return {

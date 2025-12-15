@@ -26,11 +26,10 @@ class TaskManager:
     
     # Task status priority for sorting
     STATUS_ORDER: Dict[str, int] = {
-        "Not Started": 0,
         "Pending": 1,
         "In Progress": 2,
         "Completed": 3,
-        "Failed": 4,
+        "Failed": 4
     }
     
     @staticmethod

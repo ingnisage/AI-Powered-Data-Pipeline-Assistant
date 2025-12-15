@@ -6,6 +6,7 @@ Tool handlers for data access, analysis, and quality checks.
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from .base import BaseTool, ToolResult
+from backend.services.config import config
 
 
 class QueryDataSourceTool(BaseTool):
@@ -165,7 +166,7 @@ class GenerateSQLQueryTool(BaseTool):
             """
             
             response = self.openai_client.chat.completions.create(
-                model="gpt-4",
+                model=config.FALLBACK_MODEL,  # Use centralized config
                 messages=[
                     {"role": "system", "content": "You are a senior data engineer specialized in SQL query optimization."},
                     {"role": "user", "content": prompt}
@@ -180,7 +181,7 @@ class GenerateSQLQueryTool(BaseTool):
                 "database_type": database_type,
                 "complexity": complexity,
                 "generated_query": generated_query,
-                "model_used": "gpt-4",
+                "model_used": config.FALLBACK_MODEL,  # Use centralized config
                 "tokens_used": response.usage.total_tokens if response.usage else None
             }
             

@@ -310,7 +310,7 @@ class WorkbenchAPI:
             message: User message content
             system_prompt: System prompt type
             use_tools: Whether to enable tools
-            search_source: Optional search source (stackoverflow, github, official_doc)
+            search_source: Optional search source (stackoverflow, github, official_doc, spark_docs)
             
         Returns:
             Tuple of (success, response_data, error_message)

@@ -1,11 +1,14 @@
-# backend/auth/rate_limiting.py - Rate Limiting
+# backend/auth/rate_limiting.py - Rate Limiting (Deprecated)
 """
 Rate limiting implementation for API protection.
+
+NOTE: This module is currently not used in the codebase. Consider using it for general
+API endpoint protection or integrate it with authentication middleware if needed.
 """
 
 import time
 import logging
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 from collections import defaultdict
 from threading import Lock
 
@@ -115,6 +118,3 @@ def get_rate_limiter() -> RateLimiter:
     if _rate_limiter is None:
         _rate_limiter = RateLimiter()
     return _rate_limiter
-
-
-from typing import Optional

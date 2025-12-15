@@ -198,7 +198,7 @@ class TaskUpdate(BaseModel):
             return v
         
         valid_statuses = [
-            "Not Started", "Pending", "In Progress", 
+            "Pending", "In Progress", 
             "Completed", "Failed"
         ]
         
@@ -251,7 +251,7 @@ class SearchRequest(BaseModel):
     @validator('source')
     def validate_source(cls, v):
         """Validate search source."""
-        valid_sources = ["github", "stackoverflow", "official_doc", "all"]
+        valid_sources = ["github", "stackoverflow", "official_doc", "spark_docs", "all"]
         
         if v not in valid_sources:
             raise ValueError(f'Invalid source. Must be one of: {valid_sources}')

@@ -20,7 +20,7 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 class TaskResponse(BaseModel):
     id: Union[str, int]  # Accept both string and integer IDs
     name: str
-    status: str = "Not Started"
+    status: str = "In Progress"
     progress: int = 0
     description: Optional[str] = None
     priority: Optional[str] = "Medium"

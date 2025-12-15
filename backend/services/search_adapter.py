@@ -7,7 +7,7 @@ import logging
 from typing import List, Dict, Any, Optional
 
 # Import the existing search components
-from backend.services.search_engine import SearchService as ExternalSearchService
+from backend.services.search_service import SearchService
 
 logger = logging.getLogger(__name__)
 
@@ -21,10 +21,10 @@ class SearchAdapter:
             openai_client: OpenAI client for embeddings
             supabase_client: Supabase client for database operations
         """
-        # Initialize the external search service with the provided clients
-        self.external_search_service = ExternalSearchService(openai_client, supabase_client)
+        # Initialize the search service with the provided clients
+        self.search_service = SearchService(openai_client, supabase_client)
         
-        logger.info("SearchAdapter initialized with external search components")
+        logger.info("SearchAdapter initialized with search service")
     
     async def smart_search(
         self,
@@ -38,7 +38,7 @@ class SearchAdapter:
         Args:
             query: Search query
             context: Context type (error, code_example, documentation, best_practice, all)
-            source: Optional source restriction (github, stackoverflow, official_doc)
+            source: Optional source restriction (github, stackoverflow, official_doc, spark_docs)
             max_total_results: Maximum results to return
             
         Returns:
@@ -47,21 +47,22 @@ class SearchAdapter:
         logger.info(f"Performing smart search: {query[:50]}...")
         
         try:
-            # Use the external search service's async method
-            if source:
-                # If a specific source is requested, use the tool_search method
-                result = await self.external_search_service.tool_search_async(
-                    query, 
-                    source_hint=source, 
-                    max_results=max_total_results
-                )
-            else:
-                # Otherwise use the smart search method
-                result = await self.external_search_service.search_smart_async(
-                    query, 
-                    context=context, 
-                    max_total_results=max_total_results
-                )
+            # Map context to source if needed (similar to SmartSearchTool)
+            if source is None and context != "all":
+                source_mapping = {
+                    "error": "stackoverflow",
+                    "code_example": "github",
+                    "documentation": "official_doc",
+                    "best_practice": "official_doc"
+                }
+                source = source_mapping.get(context)
+            
+            # Use the search service's smart_search method with correct parameters
+            result = await self.search_service.smart_search(
+                query=query,
+                source=source or "all",
+                max_results=max_total_results
+            )
             
             logger.info(f"Smart search completed with {len(result.get('results', []))} results")
             return result

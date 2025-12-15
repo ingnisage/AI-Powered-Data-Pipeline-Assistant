@@ -14,10 +14,12 @@ from backend.tools.executor import ModularToolExecutor
 from backend.utils.sanitization import sanitize_for_log, sanitize_for_display
 from backend.models.logging import LogBuilder, ChatMessageBuilder
 from backend.utils.logging_sanitizer import sanitize_log_message
+from backend.services.config import config
 
 from .exceptions import handle_exception, ProcessingError, NetworkError
 from .retry import retry_with_backoff, API_RETRY_CONFIG
-from .monitoring import monitored_operation, performance_counters
+from .monitoring import monitored_operation
+from backend.core.performance_monitoring import performance_counters
 from .resource_manager import resource_manager
 
 logger = logging.getLogger(__name__)
@@ -97,6 +99,7 @@ class ChatProcessor:
         Returns:
             Dictionary with AI response and metadata
         """
+
         with monitored_operation("chat_processor.process_chat", 
                                {"session_id": session_id, "user_id": user_id},
                                self.supabase_client):
@@ -139,6 +142,10 @@ class ChatProcessor:
                 
                 # Build system/user messages for the LLM
                 system_prompt = self.SYSTEM_PROMPTS.get(system_prompt_key, self.SYSTEM_PROMPTS.get("general"))
+                # If no specific prompt found, use a default one
+                if system_prompt is None:
+                    system_prompt = "You are a helpful AI assistant."
+                
                 messages = [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_msg},
@@ -155,22 +162,17 @@ class ChatProcessor:
                         performance_counters.increment("openai_client_missing_errors")
                     else:
                         try:
-                            api_call_kwargs = {
-                                "model": "gpt-4o-mini",
-                                "messages": messages,
-                                "temperature": 0.3,
-                            }
+                            openai_client = self.openai_client
                             
-                            # Create a retryable function for the OpenAI API call
-                            @retry_with_backoff(config=API_RETRY_CONFIG)
-                            def call_openai_api():
-                                return self.openai_client.chat.completions.create(**api_call_kwargs)
-                            
-                            # Run the OpenAI SDK call with retry mechanism
-                            response = await asyncio.get_event_loop().run_in_executor(
-                                None, 
-                                call_openai_api
+                            # Call OpenAI API with structured output
+                            response = openai_client.chat.completions.create(
+                                model=config.DEFAULT_MODEL,  # Use centralized config
+                                messages=messages,
+                                temperature=0.7,
+                                max_tokens=1000
+                                # Removed response_format to avoid OpenAI's JSON requirement
                             )
+
                             response_message = response.choices[0].message
                             response_data["answer"] = getattr(response_message, "content", "") or ""
                             
@@ -275,7 +277,7 @@ class ChatProcessor:
             "ask_ai": None,
             "StackOverflow": "stackoverflow",
             "GitHub": "github",
-            "Spark Docs": "official_doc",
+            "Spark Docs": "spark_docs",
             "official_doc": "official_doc",
             "stackoverflow": "stackoverflow",
             "github": "github",
