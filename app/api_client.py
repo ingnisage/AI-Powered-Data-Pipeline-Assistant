@@ -22,6 +22,13 @@ logger = logging.getLogger(__name__)
 # Get API key from environment or use default
 API_KEY = os.getenv("BACKEND_API_KEY", "test-api-key")
 
+# Warn if using test key in production
+if API_KEY == "test-api-key":
+    logger.warning("Using test API key - this may cause authentication failures in production!")
+
+logger.info(f"API client initialized with key: {API_KEY[:8]}... (hidden for security)")
+
+
 class WorkbenchAPIError(Exception):
     """Base exception for API errors."""
     pass
@@ -118,6 +125,18 @@ class WorkbenchAPI:
             
         except requests.exceptions.RequestException as e:
             error_msg = f"Request failed: {str(e)}"
+            # Provide more specific error messages for common HTTP errors
+            if hasattr(e, 'response') and e.response is not None:
+                status_code = e.response.status_code
+                if status_code == 401:
+                    error_msg = "Authentication failed (401): Invalid or missing API key. Please check your BACKEND_API_KEY environment variable."
+                elif status_code == 403:
+                    error_msg = "Access denied (403): API key valid but insufficient permissions."
+                elif status_code == 429:
+                    error_msg = "Rate limit exceeded (429): Too many requests. Please wait before trying again."
+                elif status_code >= 500:
+                    error_msg = f"Server error ({status_code}): Backend service temporarily unavailable."
+            
             logger.error(f"Task creation request exception: {e}")
             return False, None, error_msg
             
@@ -171,6 +190,18 @@ class WorkbenchAPI:
             
         except requests.exceptions.RequestException as e:
             error_msg = f"Request failed: {str(e)}"
+            # Provide more specific error messages for common HTTP errors
+            if hasattr(e, 'response') and e.response is not None:
+                status_code = e.response.status_code
+                if status_code == 401:
+                    error_msg = "Authentication failed (401): Invalid or missing API key. Please check your BACKEND_API_KEY environment variable."
+                elif status_code == 403:
+                    error_msg = "Access denied (403): API key valid but insufficient permissions."
+                elif status_code == 429:
+                    error_msg = "Rate limit exceeded (429): Too many requests. Please wait before trying again."
+                elif status_code >= 500:
+                    error_msg = f"Server error ({status_code}): Backend service temporarily unavailable."
+            
             logger.error(f"Task update request exception: {e}")
             return False, error_msg
     
@@ -246,7 +277,19 @@ class WorkbenchAPI:
             
         except requests.exceptions.RequestException as e:
             error_msg = f"Failed to fetch chat history: {str(e)}"
-            logger.error(error_msg)
+            # Provide more specific error messages for common HTTP errors
+            if hasattr(e, 'response') and e.response is not None:
+                status_code = e.response.status_code
+                if status_code == 401:
+                    error_msg = "Authentication failed (401): Invalid or missing API key. Please check your BACKEND_API_KEY environment variable."
+                elif status_code == 403:
+                    error_msg = "Access denied (403): API key valid but insufficient permissions."
+                elif status_code == 429:
+                    error_msg = "Rate limit exceeded (429): Too many requests. Please wait before trying again."
+                elif status_code >= 500:
+                    error_msg = f"Server error ({status_code}): Backend service temporarily unavailable."
+            
+            logger.error(f"Failed to fetch chat history: {e}")
             return False, None, error_msg
             
         except (ValueError, KeyError) as e:
@@ -307,6 +350,18 @@ class WorkbenchAPI:
             
         except requests.exceptions.RequestException as e:
             error_msg = f"Request failed: {str(e)}"
+            # Provide more specific error messages for common HTTP errors
+            if hasattr(e, 'response') and e.response is not None:
+                status_code = e.response.status_code
+                if status_code == 401:
+                    error_msg = "Authentication failed (401): Invalid or missing API key. Please check your BACKEND_API_KEY environment variable."
+                elif status_code == 403:
+                    error_msg = "Access denied (403): API key valid but insufficient permissions."
+                elif status_code == 429:
+                    error_msg = "Rate limit exceeded (429): Too many requests. Please wait before trying again."
+                elif status_code >= 500:
+                    error_msg = f"Server error ({status_code}): Backend service temporarily unavailable."
+            
             logger.error(f"Chat request exception: {e}")
             return False, None, error_msg
             
@@ -367,6 +422,18 @@ class WorkbenchAPI:
             
         except requests.exceptions.RequestException as e:
             error_msg = f"Search request failed: {str(e)}"
+            # Provide more specific error messages for common HTTP errors
+            if hasattr(e, 'response') and e.response is not None:
+                status_code = e.response.status_code
+                if status_code == 401:
+                    error_msg = "Authentication failed (401): Invalid or missing API key. Please check your BACKEND_API_KEY environment variable."
+                elif status_code == 403:
+                    error_msg = "Access denied (403): API key valid but insufficient permissions."
+                elif status_code == 429:
+                    error_msg = "Rate limit exceeded (429): Too many requests. Please wait before trying again."
+                elif status_code >= 500:
+                    error_msg = f"Server error ({status_code}): Backend service temporarily unavailable."
+            
             logger.error(f"Search request exception: {e}")
             return False, None, error_msg
             

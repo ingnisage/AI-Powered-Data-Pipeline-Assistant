@@ -139,15 +139,25 @@ else:
 # Display backend URL information in a more user-friendly way
 st.sidebar.markdown("### 🔌 Backend Connection")
 
-# Show the source of the backend URL
-if PRODUCTION_BACKEND_URL:
-    st.sidebar.info(f"**Production Backend**\n\n`{PRODUCTION_BACKEND_URL}`")
-else:
-    st.sidebar.warning("**Local Development**\n\n`http://localhost:8000`")
+# Show current backend configuration
+current_backend_display = PRODUCTION_BACKEND_URL if PRODUCTION_BACKEND_URL else "http://localhost:8000"
+backend_type = "Production" if PRODUCTION_BACKEND_URL else "Local Development"
 
-# Allow manual override
-API_URL = st.sidebar.text_input("Override Backend URL", DEFAULT_BACKEND_URL, 
-                               help="Manually override the backend URL if needed")
+st.sidebar.markdown(f"**{backend_type}**: `{current_backend_display}`")
+
+# Check if we're using a test API key and warn the user
+API_KEY = os.environ.get("BACKEND_API_KEY", "test-api-key")
+if API_KEY == "test-api-key":
+    st.sidebar.error("⚠️ **Test API Key Detected**\n\nAuthentication may fail. Set `BACKEND_API_KEY` environment variable.")
+
+# Allow manual override - only show if user wants to change it
+with st.sidebar.expander("⚙️ Advanced Settings"):
+    st.markdown("#### Backend Configuration")
+    API_URL = st.text_input("Override Backend URL", value=DEFAULT_BACKEND_URL, 
+                           help="Manually override the backend URL if needed", key="backend_url_override")
+    
+    # Show current effective URL
+    st.info(f"**Effective URL**: `{API_URL}`")
 
 # Log the actual URL being used
 logger.info(f"Backend URL configured as: {API_URL}")
