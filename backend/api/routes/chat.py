@@ -132,6 +132,8 @@ async def chat(
         task_name = f"Chat: {msg.message[:50]}..." if len(msg.message) > 50 else f"Chat: {msg.message}"
         task_description = f"Chat interaction with AI assistant. User said: {msg.message}"
         
+        logger.info(f"Attempting to create task from chat: {task_name}")
+        
         try:
             if supabase_client:
                 task_data = {

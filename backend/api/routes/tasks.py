@@ -60,6 +60,7 @@ async def create_task(
     """Create a new task in database."""
     try:
         logger.info(f"Creating new task: {task.name}")
+        logger.info(f"Task data: {task.dict()}")
         if supabase_client:
             task_data = {
                 "name": task.name,
@@ -70,22 +71,33 @@ async def create_task(
                 "priority": getattr(task, 'priority', 'Medium')
             }
             
+            logger.info(f"Inserting task data into Supabase: {task_data}")
             response = supabase_client.table("tasks").insert(task_data).execute()
+            logger.info(f"Supabase response: {response}")
             if response and response.data:
                 created_task = response.data[0]
+                logger.info(f"Created task data: {created_task}")
                 # Convert task ID to string to match the model expectation
                 if 'id' in created_task and isinstance(created_task['id'], int):
                     created_task['id'] = str(created_task['id'])
                 logger.info(f"Successfully created task: {created_task['id']}")
                 return TaskResponse(**created_task)
             else:
-                raise HTTPException(status_code=500, detail="Failed to create task in database")
+                error_msg = "Failed to create task in database - no data returned"
+                logger.error(error_msg)
+                raise HTTPException(status_code=500, detail=error_msg)
         else:
             logger.error("Supabase client not available")
             raise HTTPException(status_code=500, detail="Database not available")
     except Exception as e:
-        logger.error(f"Error creating task: {e}")
-        raise HTTPException(status_code=500, detail="Failed to create task")
+        logger.error(f"Error creating task: {e}", exc_info=True)
+        # Provide more specific error information
+        error_detail = f"Failed to create task: {str(e)}"
+        if "constraint" in str(e).lower():
+            error_detail = "Database constraint violation. Check task data."
+        elif "connection" in str(e).lower():
+            error_detail = "Database connection failed."
+        raise HTTPException(status_code=500, detail=error_detail)
 
 @router.patch("/{task_id}", response_model=TaskResponse, dependencies=[Depends(verify_api_key_dependency)])
 async def update_task(

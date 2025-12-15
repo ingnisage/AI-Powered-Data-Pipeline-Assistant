@@ -73,7 +73,8 @@ class ServiceContainer:
         # Initialize Supabase
         try:
             supabase_url = os.getenv("SUPABASE_URL")
-            supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+            # Use SUPABASE_KEY as fallback if SERVICE_ROLE_KEY is not available
+            supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
             
             if supabase_url and supabase_key:
                 self._supabase_client = create_client(supabase_url, supabase_key)
