@@ -230,18 +230,20 @@ def get_cache() -> InMemoryCache:
     return _cache
 
 
-def cache_key(*args, **kwargs) -> str:
-    """Generate cache key from function arguments.
+def cache_key(func_name: str, *args, **kwargs) -> str:
+    """Generate cache key from function name and arguments.
     
     Args:
+        func_name: Name of the function
         *args: Positional arguments
         **kwargs: Keyword arguments
         
     Returns:
         Hash-based cache key
     """
-    # Create deterministic string representation
-    key_parts = [str(arg) for arg in args]
+    # Create deterministic string representation including function name
+    key_parts = [func_name]
+    key_parts.extend([str(arg) for arg in args])
     key_parts.extend([f"{k}={v}" for k, v in sorted(kwargs.items())])
     key_str = "|".join(key_parts)
     
@@ -273,11 +275,11 @@ def cached(
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         async def async_wrapper(*args, **kwargs):
-            # Generate cache key
+            # Generate cache key including function name
             if key_func:
                 key = key_func(*args, **kwargs)
             else:
-                key = cache_key(*args, **kwargs)
+                key = cache_key(func.__name__, *args, **kwargs)
             
             # Try to get from cache
             cache = get_cache()
@@ -298,11 +300,11 @@ def cached(
         
         @wraps(func)
         def sync_wrapper(*args, **kwargs):
-            # Generate cache key
+            # Generate cache key including function name
             if key_func:
                 key = key_func(*args, **kwargs)
             else:
-                key = cache_key(*args, **kwargs)
+                key = cache_key(func.__name__, *args, **kwargs)
             
             # Try to get from cache
             cache = get_cache()

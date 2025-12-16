@@ -639,7 +639,7 @@ try:
         
         # Search form
         with st.form("search_form"):
-            query = st.text_input("Search Query", placeholder="Enter your search query...")
+            query = st.text_input("Search Error Log", placeholder="Enter your search error log...")
             source = st.selectbox("Source", ["all", "github", "stackoverflow", "official_doc", "spark_docs"])
             max_results = st.slider("Max Results", 1, 10, 5)
             submitted = st.form_submit_button("Search")
@@ -662,7 +662,7 @@ try:
                                 with st.expander(f"{i}. {result.get('title', 'Untitled')}"):
                                     st.markdown(f"**Source:** {result.get('source', 'Unknown')}")
                                     st.markdown(f"**URL:** [{result.get('url', 'N/A')}]({result.get('url', '#')})")
-                                    st.markdown(f"**Snippet:** {result.get('snippet', 'No snippet available')}")
+                                    st.markdown(f"**Content:** {result.get('content', 'No content available')}")
                         else:
                             st.info("No results found for your query.")
                     else:
