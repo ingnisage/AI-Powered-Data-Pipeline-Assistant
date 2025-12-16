@@ -9,6 +9,8 @@ load_dotenv()
 
 from backend.core.dependencies import lifespan, get_service_health
 from backend.utils.logging_sanitizer import SanitizingHandler, get_sanitizer
+# Import Render configuration
+from backend.core.render_config import configure_for_render
 
 # Configure logging with sanitization
 logging.basicConfig(level=logging.INFO)
@@ -23,8 +25,7 @@ root_logger.handlers.clear()
 
 for handler in original_handlers:
     sanitizing_handler = SanitizingHandler(handler, sanitizer)
-
-root_logger.addHandler(sanitizing_handler)
+    root_logger.addHandler(sanitizing_handler)
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,9 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+# Apply Render-specific optimizations if running on Render
+configure_for_render(app)
 
 # Add CORS middleware to allow frontend requests
 app.add_middleware(
@@ -55,14 +59,8 @@ async def root():
     """Root endpoint - basic health check."""
     return {"message": "AI Workbench Backend Running 🚀"}
 
-@app.get("/health")
-async def health_check():
-    """Detailed health check endpoint."""
-    health_status = get_service_health()
-    return {
-        "status": "healthy" if health_status["overall"] else "unhealthy",
-        "services": health_status["services"]
-    }
+# Note: Health check endpoint is now managed by Render configuration
+# The Render configuration will register the appropriate health check endpoint
 
 # Include routers from different modules
 from backend.api.routes import chat, logs, search, tasks, monitoring

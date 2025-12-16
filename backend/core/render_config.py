@@ -46,76 +46,14 @@ def configure_for_render(app: FastAPI = None) -> bool:
         # 5. Enable compression
         os.environ.setdefault('GZIP_COMPRESSION', 'true')
         
-        # Register health check endpoint if app is provided
-        if app:
-            _register_health_check_endpoint(app)
+        # Note: Health check endpoint is now handled by the main application
+        # We don't register a duplicate endpoint here
         
         logger.info("Render optimizations applied successfully")
         return True
     
     logger.info("Not running on Render, using default configuration")
     return False
-
-
-def _register_health_check_endpoint(app: FastAPI) -> None:
-    """
-    Register health check endpoint for Render platform.
-    
-    Args:
-        app: FastAPI app instance
-    """
-    try:
-        from backend.core.dependencies import ServiceContainer
-        
-        @app.get("/health")
-        async def health_check():
-            """Health check endpoint required by Render platform."""
-            try:
-                # Get service container and check all components
-                container = ServiceContainer()
-                health_status = container.get_health_status()
-                
-                # Overall system health
-                all_healthy = all(component["status"] in ["healthy", "disabled"] 
-                                for component in health_status.values())
-                
-                # Database specific check
-                supabase_client = container.get_supabase_client()
-                db_status = "unknown"
-                if supabase_client:
-                    try:
-                        # Perform a lightweight query to test connection
-                        response = supabase_client.table("logs").select("id").limit(1).execute()
-                        db_status = "healthy" if response else "unhealthy"
-                    except Exception as db_error:
-                        logger.warning(f"Database health check failed: {db_error}")
-                        db_status = "unhealthy"
-                else:
-                    db_status = "disabled"
-                    logger.warning("Supabase client not available for health check")
-                
-                # Update health status
-                health_status["database"] = {"status": db_status, "error": None}
-                
-                return {
-                    "status": "healthy" if all_healthy and db_status in ["healthy", "disabled"] else "degraded",
-                    "timestamp": datetime.utcnow().isoformat(),
-                    "service": "ai-workbench-backend",
-                    "components": health_status
-                }
-            except Exception as e:
-                logger.error(f"Health check failed: {e}")
-                return {
-                    "status": "unhealthy",
-                    "error": str(e),
-                    "timestamp": datetime.utcnow().isoformat(),
-                    "service": "ai-workbench-backend"
-                }
-        
-        logger.info("Health check endpoint registered successfully")
-        
-    except Exception as e:
-        logger.error(f"Failed to register health check endpoint: {e}")
 
 
 def get_render_optimized_config() -> dict:

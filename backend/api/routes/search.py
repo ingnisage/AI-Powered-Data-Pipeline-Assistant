@@ -30,7 +30,7 @@ async def search_endpoint(
         results = await search_service.smart_search(
             query=request.query,
             source=request.source,
-            max_total_results=request.max_results or 3
+            max_results=request.max_results or 3
         )
         
         return results

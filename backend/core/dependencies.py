@@ -21,6 +21,21 @@ except ImportError:
     RENDER_CONFIG = {}
     IS_RENDER = False
 
+# Import SearchService and VectorStoreService
+try:
+    from backend.services.search_service import SearchService
+    SEARCH_SERVICE_AVAILABLE = True
+except ImportError:
+    SEARCH_SERVICE_AVAILABLE = False
+    logger.warning("SearchService not available")
+
+try:
+    from backend.services.vector_service import VectorStoreService
+    VECTOR_SERVICE_AVAILABLE = True
+except ImportError:
+    VECTOR_SERVICE_AVAILABLE = False
+    logger.warning("VectorStoreService not available")
+
 logger = logging.getLogger(__name__)
 
 # Retry decorator for Supabase operations
@@ -53,10 +68,14 @@ class ServiceContainer:
         self._supabase_client: Optional[Client] = None
         self._openai_client: Optional[OpenAI] = None
         self._pubnub_client: Optional[PubNub] = None
+        self._search_service: Optional[SearchService] = None
+        self._vector_service: Optional[VectorStoreService] = None
         self._health_status: Dict[str, Dict[str, Any]] = {
             "supabase": {"status": "unknown", "error": None},
             "openai": {"status": "unknown", "error": None},
-            "pubnub": {"status": "unknown", "error": None}
+            "pubnub": {"status": "unknown", "error": None},
+            "search": {"status": "unknown", "error": None},
+            "vector": {"status": "unknown", "error": None}
         }
         
         # Initialize all services
@@ -69,6 +88,8 @@ class ServiceContainer:
         self._initialize_openai()
         self._initialize_supabase()
         self._initialize_pubnub()
+        self._initialize_search_service()
+        self._initialize_vector_service()
     
     def _initialize_openai(self):
         """Initialize OpenAI client."""
@@ -193,6 +214,47 @@ class ServiceContainer:
             self._health_status["pubnub"] = {"status": "error", "error": str(e)}
             logger.error(f"Failed to initialize PubNub client: {e}", exc_info=True)
     
+    def _initialize_search_service(self):
+        """Initialize SearchService."""
+        try:
+            if SEARCH_SERVICE_AVAILABLE:
+                # Get clients for SearchService
+                openai_client = self._openai_client
+                supabase_client = self._supabase_client
+                
+                self._search_service = SearchService(
+                    openai_client=openai_client,
+                    supabase_client=supabase_client
+                )
+                self._health_status["search"] = {"status": "healthy", "error": None}
+                logger.info("SearchService initialized successfully")
+            else:
+                self._health_status["search"] = {"status": "disabled", "error": "SearchService not available"}
+                logger.warning("SearchService not available for initialization")
+        except Exception as e:
+            self._health_status["search"] = {"status": "error", "error": str(e)}
+            logger.error(f"Failed to initialize SearchService: {e}", exc_info=True)
+    
+    def _initialize_vector_service(self):
+        """Initialize VectorStoreService."""
+        try:
+            if VECTOR_SERVICE_AVAILABLE and self._openai_client and self._supabase_client:
+                self._vector_service = VectorStoreService(
+                    openai_client=self._openai_client,
+                    supabase_client=self._supabase_client
+                )
+                self._health_status["vector"] = {"status": "healthy", "error": None}
+                logger.info("VectorStoreService initialized successfully")
+            elif VECTOR_SERVICE_AVAILABLE:
+                self._health_status["vector"] = {"status": "disabled", "error": "VectorStoreService requires OpenAI and Supabase clients"}
+                logger.warning("VectorStoreService not initialized: missing OpenAI or Supabase client")
+            else:
+                self._health_status["vector"] = {"status": "disabled", "error": "VectorStoreService not available"}
+                logger.warning("VectorStoreService not available for initialization")
+        except Exception as e:
+            self._health_status["vector"] = {"status": "error", "error": str(e)}
+            logger.error(f"Failed to initialize VectorStoreService: {e}", exc_info=True)
+    
     def get_supabase_client(self) -> Optional[Client]:
         """Get Supabase client instance."""
         return self._supabase_client
@@ -204,6 +266,14 @@ class ServiceContainer:
     def get_pubnub_client(self) -> Optional[PubNub]:
         """Get PubNub client instance."""
         return self._pubnub_client
+    
+    def get_search_service(self) -> Optional[SearchService]:
+        """Get SearchService instance."""
+        return self._search_service
+    
+    def get_vector_service(self) -> Optional[VectorStoreService]:
+        """Get VectorStoreService instance."""
+        return self._vector_service
     
     def get_health_status(self) -> Dict[str, Dict[str, Any]]:
         """Get health status of all services."""
@@ -256,3 +326,49 @@ def get_pubnub_client():
     """Dependency for PubNub client."""
     container = get_container()
     return container.get_pubnub_client()
+
+
+def get_search_service():
+    """Dependency for SearchService."""
+    container = get_container()
+    return container.get_search_service()
+
+
+def get_vector_service():
+    """Dependency for VectorStoreService."""
+    container = get_container()
+    return container.get_vector_service()
+
+
+# Add the missing lifespan function
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan manager for startup and shutdown events."""
+    logger.info("Starting application lifecycle...")
+    
+    # Startup: Initialize services
+    container = get_container()
+    
+    # Register cleanup on shutdown
+    try:
+        yield
+    finally:
+        # Shutdown: Cleanup resources
+        logger.info("Shutting down application...")
+        container.cleanup()
+        logger.info("Application shutdown complete")
+
+
+# Add the missing get_service_health function
+def get_service_health():
+    """Get the health status of all services."""
+    container = get_container()
+    health_status = container.get_health_status()
+    
+    # Overall system health - healthy if all components are healthy or disabled
+    overall_healthy = all(status["status"] in ["healthy", "disabled"] for status in health_status.values())
+    
+    return {
+        "overall": overall_healthy,
+        "services": health_status
+    }
