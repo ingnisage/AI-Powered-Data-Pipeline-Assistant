@@ -19,9 +19,15 @@ from backend.services.config import config  # Import centralized configuration
 
 # Since we're in the frontend, we need to adjust the timeout values
 # Make them slightly shorter than backend to fail faster
-FRONTEND_API_TIMEOUT_SHORT = 12  # Reduced from backend's 15
-FRONTEND_API_TIMEOUT_LONG = 25   # Reduced from backend's 30
-FRONTEND_API_TIMEOUT_TASK_OPS = 18  # Reduced from backend's 20
+# But longer for Render deployments to account for cold starts
+if os.getenv('RENDER', '').lower() == 'true':
+    FRONTEND_API_TIMEOUT_SHORT = 20   # Longer for Render cold starts
+    FRONTEND_API_TIMEOUT_LONG = 40    # Longer for Render cold starts
+    FRONTEND_API_TIMEOUT_TASK_OPS = 30  # Longer for Render cold starts
+else:
+    FRONTEND_API_TIMEOUT_SHORT = 12  # Reduced from backend's 15
+    FRONTEND_API_TIMEOUT_LONG = 25   # Reduced from backend's 30
+    FRONTEND_API_TIMEOUT_TASK_OPS = 18  # Reduced from backend's 20
 
 logger = logging.getLogger(__name__)
 

@@ -153,6 +153,25 @@ try:
     RENDER_BACKEND_URL = os.environ.get('RENDER_BACKEND_URL')
     BACKEND_URL_ENV = os.environ.get('BACKEND_URL')  # Alternative environment variable name
     PRODUCTION_BACKEND_URL = RENDER_BACKEND_URL or BACKEND_URL_ENV
+    
+    # For Render deployment, try to construct backend URL from service name if not explicitly set
+    if not PRODUCTION_BACKEND_URL and os.getenv('RENDER', '').lower() == 'true':
+        # Try to construct from RENDER_SERVICE_NAME if available
+        render_service_name = os.environ.get('RENDER_SERVICE_NAME')
+        if render_service_name:
+            # Assuming backend service follows a naming pattern like frontend service + "-backend"
+            if "-frontend" in render_service_name:
+                backend_service_name = render_service_name.replace("-frontend", "-backend")
+                PRODUCTION_BACKEND_URL = f"https://{backend_service_name}.onrender.com"
+                logger.info(f"Constructed backend URL from service name: {PRODUCTION_BACKEND_URL}")
+            else:
+                # Fallback to a generic backend service name
+                PRODUCTION_BACKEND_URL = "https://ai-workbench-backend.onrender.com"
+                logger.info(f"Using fallback backend URL: {PRODUCTION_BACKEND_URL}")
+        else:
+            # If no service name is available, use the fallback
+            PRODUCTION_BACKEND_URL = "https://ai-workbench-backend.onrender.com"
+            logger.info(f"Using default backend URL for Render: {PRODUCTION_BACKEND_URL}")
 
     if PRODUCTION_BACKEND_URL:
         DEFAULT_BACKEND_URL = PRODUCTION_BACKEND_URL
@@ -224,7 +243,11 @@ try:
             try:
                 # Test root endpoint by making a direct request
                 logger.info(f"Testing connection to backend at: {API_URL}")
-                response = requests.get(f"{API_URL}/", timeout=5)
+                
+                # Use longer timeout for Render deployments
+                timeout_duration = 15 if os.getenv('RENDER', '').lower() == 'true' else 5
+                
+                response = requests.get(f"{API_URL}/", timeout=timeout_duration)
                 if response.status_code == 200:
                     logger.info("Backend connection test successful")
                     backend_available = True
@@ -238,7 +261,7 @@ try:
                 backend_available = False
             except requests.exceptions.Timeout as e:
                 logger.error(f"Backend connection test failed: Timeout connecting to backend at {API_URL}")
-                st.sidebar.error(f"Timeout connecting to backend at {API_URL}")
+                st.sidebar.error(f"Timeout connecting to backend at {API_URL}. This is common on free Render tier during cold starts.")
                 backend_available = False
             except Exception as e:
                 logger.error(f"Backend connection test error: {e}")
@@ -258,12 +281,21 @@ try:
     if not backend_available:
         st.error("🚫 Backend service is not available. Some features may not work properly.")
         st.info("Please check:")
-        st.markdown("""
-        1. That the backend service is running
-        2. That the backend URL is correctly configured
-        3. That all required environment variables are set
-        4. Network connectivity between frontend and backend
-        """)
+        if os.getenv('RENDER', '').lower() == 'true':
+            st.markdown("""
+            1. That the backend service is running (may take a moment to start on Render free tier)
+            2. That the backend URL is correctly configured in your Render environment variables
+            3. That all required environment variables are set
+            4. Network connectivity between frontend and backend services on Render
+            5. Cold start delays on Render free tier (wait a few minutes and try again)
+            """)
+        else:
+            st.markdown("""
+            1. That the backend service is running
+            2. That the backend URL is correctly configured
+            3. That all required environment variables are set
+            4. Network connectivity between frontend and backend
+            """)
     else:
         st.markdown("### Application Status: ✅ Ready")
 

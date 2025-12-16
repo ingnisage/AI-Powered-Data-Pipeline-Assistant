@@ -13,6 +13,8 @@ services:
         value: production
       - key: LOG_LEVEL
         value: WARNING
+      - key: RENDER_BACKEND_URL
+        value: "https://ai-workbench-backend.onrender.com"  # Update this to your actual backend service URL
 
   - type: web
     name: ai-workbench-backend
