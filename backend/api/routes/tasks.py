@@ -34,7 +34,6 @@ class TaskListResponse(BaseModel):
     tasks: List[TaskResponse]
 
 @router.get("/", response_model=TaskListResponse)
-@retry_supabase_operation(max_retries=2)
 async def get_tasks(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Number of tasks per page"),

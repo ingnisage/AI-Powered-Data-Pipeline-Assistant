@@ -190,6 +190,9 @@ else:
     else:
         logger.info("Using valid backend API key")
 
+# Set the API URL in main scope
+API_URL = DEFAULT_BACKEND_URL
+
 # Allow manual override - only show if user wants to change it
 with st.sidebar.expander("⚙️ Advanced Settings"):
     st.markdown("#### Backend Configuration")
@@ -201,6 +204,318 @@ with st.sidebar.expander("⚙️ Advanced Settings"):
 
 # Log the actual URL being used
 logger.info(f"Backend URL configured as: {API_URL}")
+
+# Update the API key in environment for the API client
+os.environ["BACKEND_API_KEY"] = API_KEY
+
+# Initialize API client with the configured URL
+api_client = WorkbenchAPI(API_URL)
+
+# Test the API connection
+try:
+    # Test root endpoint by making a direct request
+    logger.info(f"Testing connection to backend at: {API_URL}")
+    response = requests.get(f"{API_URL}/", timeout=5)
+    if response.status_code == 200:
+        logger.info("Backend connection test successful")
+    else:
+        logger.error(f"Backend connection test failed with status {response.status_code}")
+        st.sidebar.error(f"Backend connection failed with status {response.status_code}")
+except requests.exceptions.ConnectionError as e:
+    logger.error(f"Backend connection test failed: Cannot connect to backend at {API_URL}")
+    st.sidebar.error(f"Cannot connect to backend at {API_URL}")
+except requests.exceptions.Timeout as e:
+    logger.error(f"Backend connection test failed: Timeout connecting to backend at {API_URL}")
+    st.sidebar.error(f"Timeout connecting to backend at {API_URL}")
+except Exception as e:
+    logger.error(f"Backend connection test error: {e}")
+    st.sidebar.error(f"Backend connection error: {e}")
+
+# Initialize session state
+# Use a fixed session ID for persistence across refreshes in development
+# In production, this would be tied to user authentication
+FIXED_SESSION_ID = "persistent_dev_session_12345"
+if "session_id" not in st.session_state:
+    st.session_state.session_id = FIXED_SESSION_ID
+    logger.info(f"Initialized persistent session: {st.session_state.session_id}")
+
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+if "tasks" not in st.session_state:
+    st.session_state.tasks = []
+
+# Add initialization for previous_input
+if "previous_input" not in st.session_state:
+    st.session_state.previous_input = ""
+
+# Add flag to track if chat history has been loaded
+if "chat_history_loaded" not in st.session_state:
+    st.session_state.chat_history_loaded = False
+
+# =================================== MAIN APPLICATION ===================================
+# Create tabs for different functionalities (removed Logs tab as requested)
+tab1, tab2, tab3 = st.tabs(["💬 Chat", "📋 Tasks", "🔍 Search"])
+
+# =================================== CHAT TAB ===================================
+with tab1:
+    st.header("🤖 AI Assistant")
+    
+    # Load chat history from backend if not already loaded
+    if "chat_history_loaded" not in st.session_state or not st.session_state.chat_history_loaded:
+        try:
+            with st.spinner("Loading chat history..."):
+                logger.info(f"Loading chat history for session: {st.session_state.session_id}")
+                
+                # Fetch chat history from backend (limit to 10 messages to ensure we get at least 5 pairs)
+                success, chat_history_data, error_msg = api_client.get_chat_history(
+                    limit=10, 
+                    session_id=st.session_state.session_id
+                )
+                
+                logger.info(f"Chat history fetch result - Success: {success}, Data count: {len(chat_history_data) if chat_history_data else 0}")
+                
+                if success and chat_history_data:
+                    logger.info(f"Raw chat history data sample: {chat_history_data[:2] if len(chat_history_data) > 0 else []}")
+                    
+                    # Convert chat history from backend format to UI format
+                    converted_messages = MessageFormatter.convert_chat_history(chat_history_data)
+                    logger.info(f"Converted messages count: {len(converted_messages)}")
+                    logger.info(f"Converted messages sample: {converted_messages[:2] if len(converted_messages) > 0 else []}")
+                    
+                    # Sort messages by created_at timestamp if available
+                    try:
+                        # Sort by timestamp, oldest first (handle cases where created_at might be missing)
+                        converted_messages.sort(key=lambda x: x.get('created_at', ''))
+                        logger.info("Messages sorted by timestamp")
+                        
+                        # Take the most recent messages (last 6 for 3 pairs)
+                        recent_messages = converted_messages[-6:] if len(converted_messages) > 6 else converted_messages
+                        
+                        # For display, we want newest at the top, so we reverse the order
+                        display_messages = recent_messages[::-1]  # Reverse the list
+                        
+                        logger.info(f"After sorting and limiting: {len(display_messages)} messages for display")
+                    except Exception as e:
+                        logger.warning(f"Could not sort messages by timestamp: {e}")
+                        # Fallback: just take the last 6 messages and reverse for display
+                        recent_messages = converted_messages[-6:] if len(converted_messages) > 6 else converted_messages
+                        display_messages = recent_messages[::-1]  # Reverse the list
+                    
+                    # Update session state with loaded messages
+                    st.session_state.messages = display_messages
+                    st.session_state.chat_history_loaded = True
+                    logger.info(f"Loaded {len(display_messages)} chat messages from backend")
+                else:
+                    # If failed to load or no history, initialize with empty list
+                    st.session_state.messages = []
+                    st.session_state.chat_history_loaded = True
+                    if error_msg:
+                        logger.warning(f"Failed to load chat history: {error_msg}")
+                        st.warning(f"Could not load chat history: {error_msg}")
+                    else:
+                        logger.info("No chat history found for this session")
+                        # Also remove this informational message from UI
+                        # st.info("No previous chat history found")
+        except Exception as e:
+            logger.error(f"Error loading chat history: {e}", exc_info=True)
+            st.session_state.messages = []
+            st.session_state.chat_history_loaded = True
+            st.error(f"Error loading chat history: {e}")
+    
+    # Move the chat input to the top
+    # Single chat input with both Enter key and Send button support
+    # Check if backend is connected before enabling chat
+    try:
+        # Test backend connectivity for chat
+        backend_connected = True  # We already tested this earlier
+    except:
+        backend_connected = False
+    
+    if backend_connected:
+        # Create a form to contain both input and button
+        with st.form(key="chat_form", clear_on_submit=True):
+            # Text input for the message
+            user_input = st.text_input(
+                label="Your message",
+                placeholder="Ask me anything about data pipelines...",
+                label_visibility="collapsed"
+            )
+            
+            # Submit button
+            submit_button = st.form_submit_button("📤 Send Message", use_container_width=True)
+            
+            # Process the input when either Enter is pressed (submit_button is True) 
+            # or when the form is submitted
+            if submit_button and user_input and user_input.strip():
+                prompt = user_input.strip()
+                
+                try:
+                    # Add user message to chat history
+                    st.session_state.messages.append({"role": "user", "content": prompt})
+                    with st.chat_message("user"):
+                        st.markdown(prompt)
+                    
+                    # Get AI response
+                    with st.chat_message("assistant"):
+                        with st.spinner("Thinking..."):
+                            success, response_data, error_msg = api_client.send_chat_message(
+                                message=prompt,
+                                system_prompt="general",
+                                use_tools=True,
+                                session_id=st.session_state.session_id  # Pass session_id for chat history tracking
+                            )
+                            
+                            if success and response_data:
+                                # Extract answer and tools used
+                                answer = response_data.get("answer", "No response received.")
+                                tools_used = response_data.get("tools_used", [])
+                                
+                                # Display response
+                                st.markdown(answer)
+                                
+                                # Display tools used if any
+                                if tools_used:
+                                    with st.expander("Tools Used"):
+                                        st.write(", ".join(tools_used))
+                                
+                                # Add assistant response to chat history
+                                st.session_state.messages.append({
+                                    "role": "assistant",
+                                    "content": answer,
+                                    "tools_used": tools_used
+                                })
+                                
+                                # Clear the task cache to force refresh when switching to tasks tab
+                                # This ensures newly created tasks from chat interactions appear
+                                clear_cache(cache_type="tasks")
+                                
+                                # Show a notification that a task was created
+                                st.success("✅ Task created from your chat message!")
+                            else:
+                                st.error(f"Failed to get response: {error_msg or 'Unknown error'}")
+                except Exception as e:
+                    logger.error(f"Error in chat processing: {e}", exc_info=True)
+                    st.error(f"Error processing your message: {e}")
+    else:
+        st.warning("⚠️ Backend connection unavailable. Chat functionality disabled.")
+    
+    # Display chat messages (moved to bottom)
+    st.subheader("Chat History")
+    try:
+        logger.info(f"Displaying {len(st.session_state.messages)} chat messages")
+        # Display messages in the order they're stored (newest first)
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+                # Display tools used if available
+                if "tools_used" in message and message["tools_used"]:
+                    with st.expander("Tools Used"):
+                        st.write(", ".join(message["tools_used"]))
+    except Exception as e:
+        logger.error(f"Error displaying chat messages: {e}", exc_info=True)
+        st.error(f"Error displaying chat messages: {e}")
+
+# =================================== TASKS TAB ===================================
+with tab2:
+    st.header("📋 Task Management")
+    
+    # Task creation form
+    with st.form("create_task_form"):
+        task_name = st.text_input("Task Name")
+        submitted = st.form_submit_button("Create Task")
+        
+        if submitted and task_name:
+            with st.spinner("Creating task..."):
+                success, task_data, error_msg = api_client.create_task(name=task_name)
+                if success and task_data:
+                    st.success(f"Task '{task_name}' created successfully!")
+                    # Refresh tasks list
+                    st.session_state.tasks = []  # Clear cache to force refresh
+                    st.rerun()
+                else:
+                    st.error(f"Failed to create task: {error_msg or 'Unknown error'}")
+    
+    st.divider()
+    
+    # Display tasks
+    st.subheader("Existing Tasks")
+    
+    with st.spinner("Loading tasks..."):
+        # Use client-side caching for tasks
+        cached_tasks = get_cached_tasks()
+        if cached_tasks is None:
+            success, tasks_data, error_msg = api_client.get_tasks()
+            if success and tasks_data:
+                # Cache the tasks
+                cache_tasks(tasks_data)
+                cached_tasks = tasks_data
+            else:
+                st.error(f"Failed to load tasks: {error_msg or 'Unknown error'}")
+                cached_tasks = []
+        
+        if cached_tasks:
+            # Sort and deduplicate tasks
+            sorted_tasks = TaskManager.sort_tasks(TaskManager.deduplicate(cached_tasks))
+            
+            # Display tasks in a table
+            for task in sorted_tasks:
+                # Get the updated timestamp for display next to task title
+                updated_at = task.get('updated_at', '')
+                formatted_timestamp = MessageFormatter.format_timestamp(updated_at) if updated_at else ''
+                
+                # Create task title with timestamp aligned to the right
+                task_title = f"**{task['name']}** - {task['status']} ({task['progress']}%)"
+                if formatted_timestamp:
+                    # Display timestamp next to task title
+                    task_display = f"{task_title}  \n*Updated: {formatted_timestamp}*"
+                else:
+                    task_display = task_title
+                
+                with st.expander(task_display):
+                    st.write(f"**ID:** {task['id']}")
+                    st.write(f"**Description:** {task.get('description', 'No description')}")
+                    st.write(f"**Priority:** {task.get('priority', 'Medium')}")
+                    st.write(f"**Assigned To:** {task.get('assigned_to', 'Unassigned')}")
+                    st.write(f"**Created:** {MessageFormatter.format_timestamp(task.get('created_at', ''))}")
+                    st.write(f"**Updated:** {MessageFormatter.format_timestamp(task.get('updated_at', ''))}")
+        else:
+            st.info("No tasks found.")
+
+# =================================== SEARCH TAB ===================================
+with tab3:
+    st.header("🔍 Knowledge Search")
+    
+    # Search form
+    with st.form("search_form"):
+        query = st.text_input("Search Query", placeholder="Enter your search query...")
+        source = st.selectbox("Source", ["all", "github", "stackoverflow", "official_doc", "spark_docs"])
+        max_results = st.slider("Max Results", 1, 10, 5)
+        submitted = st.form_submit_button("Search")
+        
+        if submitted and query:
+            with st.spinner("Searching..."):
+                success, search_results, error_msg = api_client.search_knowledge(
+                    query=query,
+                    source=source,
+                    max_results=max_results
+                )
+                
+                if success and search_results:
+                    st.subheader(f"Search Results ({search_results.get('total_results', 0)} found)")
+                    
+                    # Display search results
+                    results = search_results.get("results", [])
+                    if results:
+                        for i, result in enumerate(results, 1):
+                            with st.expander(f"{i}. {result.get('title', 'Untitled')}"):
+                                st.markdown(f"**Source:** {result.get('source', 'Unknown')}")
+                                st.markdown(f"**URL:** [{result.get('url', 'N/A')}]({result.get('url', '#')})")
+                                st.markdown(f"**Snippet:** {result.get('snippet', 'No snippet available')}")
+                    else:
+                        st.info("No results found for your query.")
+                else:
+                    st.error(f"Search failed: {error_msg or 'Unknown error'}")
 
 # Performance settings in sidebar
 with st.sidebar.expander("⚙️ Performance Settings"):

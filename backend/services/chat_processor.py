@@ -115,7 +115,7 @@ class ChatProcessor:
                 # Build chat message entry
                 chat_entry = ChatMessageBuilder.user_message(
                     content=sanitized_msg,
-                    session_id=session_id or "default_session",
+                    session_id=session_id if session_id is not None else "default_session",
                     user_id=user_id,
                     system_prompt=system_prompt_key
                 )
@@ -200,7 +200,7 @@ class ChatProcessor:
                 # Build assistant response entry
                 assistant_entry = ChatMessageBuilder.assistant_message(
                     content=sanitize_for_display(response_data["answer"]),
-                    session_id=session_id or "default_session",
+                    session_id=session_id if session_id is not None else "default_session",
                     user_id=user_id,
                     system_prompt=system_prompt_key,
                     tools_used=[r.get("tool_name") for r in response_data["tool_results"]],
@@ -224,7 +224,7 @@ class ChatProcessor:
                 if self.publish:
                     try:
                         self.publish("chat", {
-                            "session_id": session_id or "default",
+                            "session_id": session_id if session_id is not None else "default",
                             "message": sanitize_for_display(response_data["answer"][:400])
                         })
                         logger.debug("Real-time update published")

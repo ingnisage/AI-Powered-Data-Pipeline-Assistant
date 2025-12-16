@@ -360,7 +360,8 @@ class WorkbenchAPI:
         message: str,
         system_prompt: str = "general",
         use_tools: bool = True,
-        search_source: Optional[str] = None
+        search_source: Optional[str] = None,
+        session_id: Optional[str] = None
     ) -> Tuple[bool, Optional[Dict[str, Any]], Optional[str]]:
         """Send a chat message to the backend.
         
@@ -369,19 +370,29 @@ class WorkbenchAPI:
             system_prompt: System prompt type
             use_tools: Whether to enable tools
             search_source: Optional search source (stackoverflow, github, official_doc, spark_docs)
+            session_id: Optional session identifier for chat history tracking
             
         Returns:
             Tuple of (success, response_data, error_message)
         """
         try:
+            # Prepare the payload with session_id
+            payload = {
+                "message": message,
+                "system_prompt": system_prompt,
+                "use_tools": use_tools
+            }
+            
+            # Add optional fields if provided
+            if search_source is not None:
+                payload["search_source"] = search_source
+            
+            if session_id is not None:
+                payload["session_id"] = session_id
+            
             response = requests.post(
                 f"{self.base_url}/chat/",
-                json={
-                    "message": message,
-                    "system_prompt": system_prompt,
-                    "use_tools": use_tools,
-                    "search_source": search_source
-                },
+                json=payload,
                 headers={"X-API-Key": API_KEY},
                 timeout=FRONTEND_API_TIMEOUT_LONG
             )
@@ -427,7 +438,7 @@ class WorkbenchAPI:
             error_msg = "Invalid response from backend"
             logger.error(f"Invalid chat response format: {e}")
             return False, None, error_msg
-    
+
     # =================================== SEARCH OPERATIONS ===================================
     
     def search_knowledge(

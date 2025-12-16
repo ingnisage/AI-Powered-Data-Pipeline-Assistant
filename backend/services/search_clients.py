@@ -75,7 +75,10 @@ class StackOverflowClient:
     """Handles searching and parsing StackExchange results with rate limiting and retries."""
     
     BASE_URL = "https://api.stackexchange.com/2.3/search/advanced"
-    _semaphore = asyncio.Semaphore(5)  # Max 5 concurrent SO requests
+    
+    def __init__(self):
+        """Initialize the client with a semaphore for concurrency control."""
+        self._semaphore = asyncio.Semaphore(5)  # Max 5 concurrent SO requests
     
     def _clean_html(self, body_html: str) -> str:
         """Robustly clean HTML content using BeautifulSoup."""
@@ -148,7 +151,10 @@ class GitHubClient:
     """Handles searching GitHub repositories, issues, PRs, and code with rate limiting and retries."""
     
     BASE_URL = "https://api.github.com/search"
-    _semaphore = asyncio.Semaphore(3)  # Max 3 concurrent GitHub requests (strict rate limit)
+    
+    def __init__(self):
+        """Initialize the client with a semaphore for concurrency control."""
+        self._semaphore = asyncio.Semaphore(3)  # Max 3 concurrent GitHub requests (strict rate limit)
     
     def _get_headers(self) -> Dict[str, str]:
         headers = {
@@ -263,7 +269,9 @@ class OfficialDocsClient:
     NOTE: This client returns placeholder results. In a production environment, 
     this would use a proper documentation search API."""
     
-    _semaphore = asyncio.Semaphore(4)  # Max 4 concurrent doc scraping requests
+    def __init__(self):
+        """Initialize the client with a semaphore for concurrency control."""
+        self._semaphore = asyncio.Semaphore(4)  # Max 4 concurrent doc scraping requests
     
     async def search(self, query: str, max_results: int) -> List[Document]:
         """Asynchronously search docs with rate limiting."""
@@ -313,10 +321,31 @@ def _cache_key(source: str, query: str, max_results: int) -> str:
     return hashlib.sha256(key.encode()).hexdigest()
 
 
-# Pre-instantiate clients for caching (reuse same instances)
-_stackoverflow_client = StackOverflowClient()
-_github_client = GitHubClient()
-_official_docs_client = OfficialDocsClient()
+# Lazy instantiation of clients for caching (instantiate only when needed)
+_stackoverflow_client = None
+_github_client = None
+_official_docs_client = None
+
+def _get_stackoverflow_client():
+    """Get or create StackOverflow client."""
+    global _stackoverflow_client
+    if _stackoverflow_client is None:
+        _stackoverflow_client = StackOverflowClient()
+    return _stackoverflow_client
+
+def _get_github_client():
+    """Get or create GitHub client."""
+    global _github_client
+    if _github_client is None:
+        _github_client = GitHubClient()
+    return _github_client
+
+def _get_official_docs_client():
+    """Get or create Official Docs client."""
+    global _official_docs_client
+    if _official_docs_client is None:
+        _official_docs_client = OfficialDocsClient()
+    return _official_docs_client
 
 
 @cached(namespace="search", ttl=300)
@@ -327,7 +356,8 @@ async def search_stackoverflow_cached(query: str, max_results: int = 5) -> tuple
     Note: lru_cache doesn't work directly with async functions returning lists,
     so we convert results to JSON-serializable tuples for caching.
     """
-    docs = await _stackoverflow_client.search(query, max_results)
+    client = _get_stackoverflow_client()
+    docs = await client.search(query, max_results)
     # Convert Document objects to tuples for caching
     import json
     return tuple((d.content, d.title, d.source_type, d.source_url, json.dumps(d.metadata)) for d in docs)
@@ -341,7 +371,8 @@ async def search_github_cached(query: str, max_results: int = 5) -> tuple:
     Note: lru_cache doesn't work directly with async functions returning lists,
     so we convert results to JSON-serializable tuples for caching.
     """
-    docs = await _github_client.search(query, max_results)
+    client = _get_github_client()
+    docs = await client.search(query, max_results)
     # Convert Document objects to tuples for caching
     import json
     return tuple((d.content, d.title, d.source_type, d.source_url, json.dumps(d.metadata)) for d in docs)
@@ -355,7 +386,8 @@ async def search_official_docs_cached(query: str, max_results: int = 5) -> tuple
     Note: lru_cache doesn't work directly with async functions returning lists,
     so we convert results to JSON-serializable tuples for caching.
     """
-    docs = await _official_docs_client.search(query, max_results)
+    client = _get_official_docs_client()
+    docs = await client.search(query, max_results)
     # Convert Document objects to tuples for caching
     import json
     return tuple((d.content, d.title, d.source_type, d.source_url, json.dumps(d.metadata)) for d in docs)

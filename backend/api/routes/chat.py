@@ -35,7 +35,6 @@ def publish_fn(channel: str, data: Dict[str, Any]) -> None:
     logger.debug(f"Publishing to channel {channel}: {data}")
 
 @router.get("/chat-history", response_model=ChatHistoryResponse, dependencies=[Depends(verify_api_key_dependency)])
-@retry_supabase_operation(max_retries=2)
 async def get_chat_history(
     limit: int = Query(20, ge=1, le=100, description="Number of messages to return"),
     user_id: Optional[str] = Query(None, description="Filter by user ID"),
@@ -143,7 +142,9 @@ async def chat(
             user_msg=msg.message,
             system_prompt_key=getattr(msg, 'system_prompt', 'general'),
             use_tools=getattr(msg, 'use_tools', False),
-            search_source=getattr(msg, 'search_source', None)
+            search_source=getattr(msg, 'search_source', None),
+            session_id=getattr(msg, 'session_id', None),  # Pass session_id
+            user_id=getattr(msg, 'user_id', None)  # Pass user_id
         )
         
         # Extract tools used from the response

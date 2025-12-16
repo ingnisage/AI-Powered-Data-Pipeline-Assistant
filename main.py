@@ -59,8 +59,16 @@ async def root():
     """Root endpoint - basic health check."""
     return {"message": "AI Workbench Backend Running 🚀"}
 
-# Note: Health check endpoint is now managed by Render configuration
-# The Render configuration will register the appropriate health check endpoint
+@app.get("/health")
+async def health_check():
+    """Detailed health check endpoint."""
+    health_status = get_service_health()
+    # Return HTTP 503 if unhealthy, otherwise 200
+    status_code = 200 if health_status["overall"] else 503
+    return {
+        "status": "healthy" if health_status["overall"] else "unhealthy",
+        "services": health_status["services"]
+    }
 
 # Include routers from different modules
 from backend.api.routes import chat, logs, search, tasks, monitoring
@@ -73,4 +81,6 @@ app.include_router(monitoring.router)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Use the PORT environment variable if available (for Render), otherwise default to 8000
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)

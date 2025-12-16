@@ -3,6 +3,7 @@ import logging
 from typing import Optional, Dict, Any
 from functools import lru_cache
 from contextlib import asynccontextmanager
+import asyncio
 from fastapi import Depends, FastAPI
 from openai import OpenAI
 from supabase import create_client, Client
@@ -42,20 +43,38 @@ logger = logging.getLogger(__name__)
 def retry_supabase_operation(max_retries: int = 3):
     """Decorator to add retry mechanism to Supabase operations."""
     def decorator(func):
-        @retry(
-            stop=stop_after_attempt(max_retries),
-            wait=wait_exponential(multiplier=1, min=4, max=10),
-            retry=retry_if_exception_type((
-                httpx.TimeoutException, 
-                httpx.NetworkError,
-                httpx.RemoteProtocolError,
-                ConnectionError
-            )),
-            reraise=True
-        )
-        def wrapper(*args, **kwargs):
-            return func(*args, **kwargs)
-        return wrapper
+        if asyncio.iscoroutinefunction(func):
+            # Handle async functions
+            @retry(
+                stop=stop_after_attempt(max_retries),
+                wait=wait_exponential(multiplier=1, min=4, max=10),
+                retry=retry_if_exception_type((
+                    httpx.TimeoutException, 
+                    httpx.NetworkError,
+                    httpx.RemoteProtocolError,
+                    ConnectionError
+                )),
+                reraise=True
+            )
+            async def async_wrapper(*args, **kwargs):
+                return await func(*args, **kwargs)
+            return async_wrapper
+        else:
+            # Handle sync functions
+            @retry(
+                stop=stop_after_attempt(max_retries),
+                wait=wait_exponential(multiplier=1, min=4, max=10),
+                retry=retry_if_exception_type((
+                    httpx.TimeoutException, 
+                    httpx.NetworkError,
+                    httpx.RemoteProtocolError,
+                    ConnectionError
+                )),
+                reraise=True
+            )
+            def sync_wrapper(*args, **kwargs):
+                return func(*args, **kwargs)
+            return sync_wrapper
     return decorator
 
 
@@ -118,51 +137,18 @@ class ServiceContainer:
             logger.info(f"Supabase key present: {supabase_key is not None}")
             
             if supabase_url and supabase_key:
-                logger.info("Initializing Supabase client with custom HTTP client...")
+                logger.info("Initializing Supabase client...")
                 
-                # Get Render-optimized configuration if available
-                pool_size = RENDER_CONFIG.get("pool_size", 20) if IS_RENDER else 20
-                max_keepalive = RENDER_CONFIG.get("max_overflow", 10) if IS_RENDER else 10
-                connect_timeout = RENDER_CONFIG.get("connect_timeout", 10) if IS_RENDER else 10
-                read_timeout = RENDER_CONFIG.get("request_timeout", 30) if IS_RENDER else 30
-                
-                # Additional connection pool optimizations inspired by SQLAlchemy best practices
-                pool_recycle = int(os.getenv("DB_POOL_RECYCLE", "300"))  # 5 minutes
-                pool_timeout = int(os.getenv("DB_POOL_TIMEOUT", "30"))
-                
-                # Create custom HTTP transport with retry mechanism and connection pooling
-                transport = httpx.HTTPTransport(
-                    retries=3,  # Automatic retries
-                    verify=True
-                )
-                
-                # Create custom HTTP client with comprehensive timeout and connection pooling configuration
-                http_client = httpx.Client(
-                    transport=transport,
-                    timeout=Timeout(
-                        connect=connect_timeout,      # Connection timeout
-                        read=read_timeout,           # Read timeout
-                        write=10.0,                  # Write timeout
-                        pool=60.0                    # Connection pool timeout
-                    ),
-                    limits=httpx.Limits(
-                        max_connections=pool_size,       # Maximum connections
-                        max_keepalive_connections=max_keepalive,  # Keep-alive connections
-                        keepalive_expiry=pool_recycle   # Connection recycle time
-                    )
-                )
-                
-                # Create Supabase client with custom HTTP client
+                # Create Supabase client (without http_client parameter)
                 self._supabase_client = create_client(
                     supabase_url, 
-                    supabase_key,
-                    http_client=http_client
+                    supabase_key
                 )
                 
                 self._health_status["supabase"] = {"status": "healthy", "error": None}
-                logger.info("Supabase client initialized successfully with custom HTTP client")
+                logger.info("Supabase client initialized successfully")
                 
-                # Test the connection
+                # Test the connection (simplified test without async)
                 try:
                     logger.info("Testing Supabase connection...")
                     response = self._supabase_client.table("tasks").select("id").limit(1).execute()

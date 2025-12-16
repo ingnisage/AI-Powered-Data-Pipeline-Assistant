@@ -136,6 +136,11 @@ class MessageFormatter:
             if tools_used:
                 ui_msg["tools_used"] = tools_used
             
+            # Preserve created_at for proper sorting
+            created_at = msg.get("created_at")
+            if created_at:
+                ui_msg["created_at"] = created_at
+            
             ui_messages.append(ui_msg)
         
         logger.debug(f"Converted {len(messages)} messages to UI format")
