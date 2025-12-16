@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: ai-workbench-frontend
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "streamlit run app/app.py --server.port $PORT --server.address 0.0.0.0"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.9.16
+      - key: RENDER
+        value: "true"
+      - key: ENVIRONMENT
+        value: production
+      - key: LOG_LEVEL
+        value: WARNING
+
+  - type: web
+    name: ai-workbench-backend
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python -m backend.main --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.9.16
+      - key: RENDER
+        value: "true"
+      - key: ENVIRONMENT
+        value: production
+      - key: LOG_LEVEL
+        value: WARNING
+      - key: PORT
+        value: 8000
