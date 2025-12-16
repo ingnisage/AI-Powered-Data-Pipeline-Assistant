@@ -16,7 +16,7 @@ class AiWorkbenchConfig:
     """Configuration for ai_workbench components."""
     
     # API timeouts
-    API_TIMEOUT_SHORT: int = 10
+    API_TIMEOUT_SHORT: int = 15
     API_TIMEOUT_LONG: int = 30
     API_TIMEOUT_TASK_OPS: int = 20  # Added missing timeout for task operations
     

@@ -15,7 +15,13 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from backend.services.config import config
+from backend.services.config import config  # Import centralized configuration
+
+# Since we're in the frontend, we need to adjust the timeout values
+# Make them slightly shorter than backend to fail faster
+FRONTEND_API_TIMEOUT_SHORT = 12  # Reduced from backend's 15
+FRONTEND_API_TIMEOUT_LONG = 25   # Reduced from backend's 30
+FRONTEND_API_TIMEOUT_TASK_OPS = 18  # Reduced from backend's 20
 
 logger = logging.getLogger(__name__)
 
@@ -48,18 +54,37 @@ class WorkbenchAPI:
     
     # =================================== TASK OPERATIONS ===================================
     
-    def get_tasks(self) -> Tuple[bool, Optional[List[Dict[str, Any]]], Optional[str]]:
-        """Fetch all tasks from the backend.
+    def get_tasks(self, page: int = 1, page_size: int = 20, status: str = None, priority: str = None) -> Tuple[bool, Optional[List[Dict[str, Any]]], Optional[str]]:
+        """Fetch tasks from the backend with pagination and filtering.
         
+        Args:
+            page: Page number (1-indexed)
+            page_size: Number of tasks per page
+            status: Filter by task status
+            priority: Filter by task priority
+            
         Returns:
             Tuple of (success, tasks_list, error_message)
         """
         try:
-            logger.info(f"Attempting to fetch tasks from: {self.base_url}/tasks/")
+            # Build query parameters
+            params = {
+                "page": page,
+                "page_size": page_size
+            }
+            
+            # Add optional filters
+            if status:
+                params["status"] = status
+            if priority:
+                params["priority"] = priority
+            
+            logger.info(f"Attempting to fetch tasks from: {self.base_url}/tasks/ with params: {params}")
             r = requests.get(
                 f"{self.base_url}/tasks/",
+                params=params,
                 headers={"X-API-Key": API_KEY},
-                timeout=config.API_TIMEOUT_SHORT
+                timeout=FRONTEND_API_TIMEOUT_SHORT
             )
             r.raise_for_status()
             tasks = r.json().get("tasks", [])
@@ -72,12 +97,26 @@ class WorkbenchAPI:
             return False, None, error_msg
             
         except requests.exceptions.Timeout:
-            error_msg = "Task fetch request timed out"
+            error_msg = "Task fetch request timed out. The server is taking too long to respond. Please check your internet connection and try again."
             logger.warning(error_msg)
             return False, None, error_msg
             
         except requests.exceptions.RequestException as e:
             error_msg = f"Failed to fetch tasks: {str(e)}"
+            # Provide more specific error messages for common HTTP errors
+            if hasattr(e, 'response') and e.response is not None:
+                status_code = e.response.status_code
+                if status_code == 401:
+                    error_msg = "Authentication failed (401): Invalid or missing API key. Please check your BACKEND_API_KEY environment variable."
+                elif status_code == 403:
+                    error_msg = "Access denied (403): API key valid but insufficient permissions."
+                elif status_code == 429:
+                    error_msg = "Rate limit exceeded (429): Too many requests. Please wait before trying again."
+                elif status_code == 504:
+                    error_msg = "Server timeout (504): The database is taking too long to respond. Please try again later."
+                elif status_code >= 500:
+                    error_msg = f"Server error ({status_code}): Backend service temporarily unavailable. Please try again later."
+            
             logger.error(error_msg)
             return False, None, error_msg
             
@@ -100,7 +139,7 @@ class WorkbenchAPI:
                 f"{self.base_url}/tasks/",
                 json={"name": name},
                 headers={"X-API-Key": API_KEY},
-                timeout=config.API_TIMEOUT_TASK_OPS
+                timeout=FRONTEND_API_TIMEOUT_TASK_OPS
             )
             r.raise_for_status()
             
@@ -119,7 +158,7 @@ class WorkbenchAPI:
             return False, None, error_msg
             
         except requests.exceptions.Timeout:
-            error_msg = "Request timed out"
+            error_msg = "Request timed out. The server is taking too long to respond. Please check your internet connection and try again."
             logger.error("Task creation timed out")
             return False, None, error_msg
             
@@ -163,7 +202,7 @@ class WorkbenchAPI:
                 f"{self.base_url}/tasks/{task_id}",
                 json=payload,
                 headers={"X-API-Key": API_KEY},
-                timeout=config.API_TIMEOUT_TASK_OPS
+                timeout=FRONTEND_API_TIMEOUT_TASK_OPS
             )
             logger.info(f"Task update response status: {r.status_code}")
             if r.text:
@@ -217,7 +256,7 @@ class WorkbenchAPI:
             r = requests.get(
                 f"{self.base_url}/logs/",
                 headers={"X-API-Key": API_KEY},
-                timeout=config.API_TIMEOUT_SHORT
+                timeout=FRONTEND_API_TIMEOUT_SHORT
             )
             r.raise_for_status()
             logs = r.json().get("logs", [])
@@ -229,30 +268,47 @@ class WorkbenchAPI:
             return False, None, "Connection error"
             
         except requests.exceptions.Timeout:
-            logger.warning("Logs fetch request timed out")
-            return False, None, "Timeout"
+            logger.warning("Logs fetch request timed out. The server is taking too long to respond. Please check your internet connection and try again.")
+            return False, None, "Timeout: The server is taking too long to respond. Please check your internet connection and try again."
             
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to fetch logs: {e}")
-            return False, None, str(e)
+            return False, None, f"Failed to fetch logs: {str(e)}"
     
     # =================================== CHAT OPERATIONS ===================================
     
-    def get_chat_history(self, limit: int = 10) -> Tuple[bool, Optional[List[Dict[str, Any]]], Optional[str]]:
-        """Fetch chat history from the backend.
+    def get_chat_history(self, limit: int = 20, user_id: str = None, session_id: str = None, before_id: str = None) -> Tuple[bool, Optional[List[Dict[str, Any]]], Optional[str]]:
+        """Fetch chat history from the backend with optimized querying.
         
         Args:
             limit: Maximum number of messages to fetch
+            user_id: Filter by user ID
+            session_id: Filter by session ID
+            before_id: Get messages before this ID (cursor pagination)
             
         Returns:
             Tuple of (success, messages_list, error_message)
         """
         try:
-            logger.info(f"Attempting to fetch chat history from: {self.base_url}/chat/chat-history")
+            # Build query parameters
+            params = {
+                "limit": limit
+            }
+            
+            # Add optional filters
+            if user_id:
+                params["user_id"] = user_id
+            if session_id:
+                params["session_id"] = session_id
+            if before_id:
+                params["before_id"] = before_id
+            
+            logger.info(f"Attempting to fetch chat history from: {self.base_url}/chat/chat-history with params: {params}")
             r = requests.get(
                 f"{self.base_url}/chat/chat-history",
+                params=params,
                 headers={"X-API-Key": API_KEY},
-                timeout=config.API_TIMEOUT_SHORT
+                timeout=FRONTEND_API_TIMEOUT_SHORT
             )
             r.raise_for_status()
             
@@ -271,7 +327,7 @@ class WorkbenchAPI:
             return False, None, error_msg
             
         except requests.exceptions.Timeout:
-            error_msg = "Chat history fetch request timed out"
+            error_msg = "Chat history fetch request timed out. The server is taking too long to respond. Please check your internet connection and try again."
             logger.warning(error_msg)
             return False, None, error_msg
             
@@ -286,6 +342,8 @@ class WorkbenchAPI:
                     error_msg = "Access denied (403): API key valid but insufficient permissions."
                 elif status_code == 429:
                     error_msg = "Rate limit exceeded (429): Too many requests. Please wait before trying again."
+                elif status_code == 504:
+                    error_msg = "Server timeout (504): The database is taking too long to respond. Please try again later."
                 elif status_code >= 500:
                     error_msg = f"Server error ({status_code}): Backend service temporarily unavailable."
             
@@ -325,7 +383,7 @@ class WorkbenchAPI:
                     "search_source": search_source
                 },
                 headers={"X-API-Key": API_KEY},
-                timeout=config.API_TIMEOUT_LONG
+                timeout=FRONTEND_API_TIMEOUT_LONG
             )
             response.raise_for_status()
             
@@ -344,7 +402,7 @@ class WorkbenchAPI:
             return False, None, error_msg
             
         except requests.exceptions.Timeout:
-            error_msg = "Request timed out. The backend may be overloaded."
+            error_msg = "Request timed out. The server is taking too long to respond. Please check your internet connection and try again."
             logger.error("Chat request timed out")
             return False, None, error_msg
             
@@ -397,7 +455,7 @@ class WorkbenchAPI:
                     "max_results": max_results
                 },
                 headers={"X-API-Key": API_KEY},
-                timeout=config.API_TIMEOUT_TASK_OPS
+                timeout=FRONTEND_API_TIMEOUT_TASK_OPS
             )
             response.raise_for_status()
             
@@ -416,7 +474,7 @@ class WorkbenchAPI:
             return False, None, error_msg
             
         except requests.exceptions.Timeout:
-            error_msg = "Search request timed out. The backend may be overloaded."
+            error_msg = "Search request timed out. The server is taking too long to respond. Please check your internet connection and try again."
             logger.error("Search request timed out")
             return False, None, error_msg
             

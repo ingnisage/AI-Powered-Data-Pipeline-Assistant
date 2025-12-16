@@ -3,7 +3,8 @@
 Chat-related API endpoints with proper error handling and logging.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Body
+import asyncio
+from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel
 import logging
@@ -11,10 +12,11 @@ from datetime import datetime
 
 from backend.models.interaction import ChatMessage
 from backend.auth.security import verify_api_key_dependency
-from backend.core.dependencies import get_openai_client, get_supabase_client, get_container
+from backend.core.dependencies import get_openai_client, get_supabase_client, get_container, retry_supabase_operation
 from backend.core.guardrails import contains_pii, rate_limiter  # Added imports for PII detection and rate limiting
 from backend.utils.logging_helpers import log_and_publish
 from backend.utils.profanity_filter import validate_content  # Added import for profanity filter
+from backend.db.optimized_queries import OptimizedQueries
 
 logger = logging.getLogger(__name__)
 
@@ -33,20 +35,36 @@ def publish_fn(channel: str, data: Dict[str, Any]) -> None:
     logger.debug(f"Publishing to channel {channel}: {data}")
 
 @router.get("/chat-history", response_model=ChatHistoryResponse, dependencies=[Depends(verify_api_key_dependency)])
-async def get_chat_history(limit: int = 10, supabase_client = Depends(get_supabase_client)):
-    """Get chat history from database."""
+@retry_supabase_operation(max_retries=2)
+async def get_chat_history(
+    limit: int = Query(20, ge=1, le=100, description="Number of messages to return"),
+    user_id: Optional[str] = Query(None, description="Filter by user ID"),
+    session_id: Optional[str] = Query(None, description="Filter by session ID"),
+    before_id: Optional[str] = Query(None, description="Get messages before this ID (cursor pagination)"),
+    supabase_client = Depends(get_supabase_client)
+):
+    """Get chat history from database with optimized querying."""
     try:
-        logger.info(f"Fetching chat history with limit {limit}")
+        logger.info(f"Fetching chat history with params - limit: {limit}, user_id: {user_id}, session_id: {session_id}")
         logger.info(f"Supabase client available: {supabase_client is not None}")
         
-        # Fetch chat history from database
+        # Fetch chat history from database using optimized query
         if supabase_client:
-            logger.info("Executing Supabase query for chat history")
-            response = supabase_client.table("chat_history").select("*").order("created_at", desc=True).limit(limit).execute()
-            logger.info(f"Supabase response received: {response is not None}")
-            messages = response.data if response and hasattr(response, 'data') else []
-            logger.info(f"Successfully fetched {len(messages)} chat messages from database")
-            return ChatHistoryResponse(messages=messages)
+            logger.info("Executing optimized Supabase query for chat history")
+            
+            # Use optimized query with pagination support
+            result = await OptimizedQueries.get_chat_history_optimized(
+                supabase_client=supabase_client,
+                user_id=user_id,
+                session_id=session_id,
+                limit=limit,
+                before_id=before_id
+            )
+            
+            logger.info(f"Successfully fetched {result['total_count']} chat messages from database")
+            logger.info(f"Has more messages: {result['has_more']}")
+            
+            return ChatHistoryResponse(messages=result["messages"])
         else:
             logger.warning("Supabase client not available")
             return ChatHistoryResponse(messages=[])

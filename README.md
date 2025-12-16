@@ -15,8 +15,9 @@ This project is an AI-powered assistant designed to help data engineers and anal
 5. [Usage](#usage)
 6. [API Documentation](#api-documentation)
 7. [Detailed Documentation](#detailed-documentation)
-8. [Contributing](#contributing)
-9. [License](#license)
+8. [Testing](#testing)
+9. [Contributing](#contributing)
+10. [License](#license)
 
 ## Project Overview
 
@@ -151,14 +152,33 @@ Detailed API documentation is available when the backend server is running at `/
 
 ## Detailed Documentation
 
-For comprehensive documentation on all aspects of the project, please refer to the [CONSOLIDATED_DOCUMENTATION.md](CONSOLIDATED_DOCUMENTATION.md) file, which contains:
+For comprehensive documentation on all aspects of the project, please refer to the [PROJECT_DOCUMENTATION.md](PROJECT_DOCUMENTATION.md) file, which contains:
 
-- AI Workbench V2 Enhancements
-- Architecture Improvements
-- Code Quality Improvements
-- Performance Improvements
-- Security Additions
+- Authentication System Improvements
+- Search Functionality Implementation
+- Rate Limiting Modules
+- Monitoring Modules
+- Fixes Summary
 - And much more...
+
+## Testing
+
+The project includes a comprehensive test suite to verify functionality. Tests are located in the `tests/` directory.
+
+### Running Tests
+
+```bash
+# Run all tests
+python tests/run_tests.py
+
+# Run specific test file
+python tests/test_auth.py
+
+# Run tests with unittest
+python -m unittest discover tests
+```
+
+See [tests/README.md](tests/README.md) for more detailed information about running and writing tests.
 
 ## Deployment
 

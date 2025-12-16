@@ -3,14 +3,16 @@
 Task-related API endpoints.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Body
-from typing import List, Optional, Union
+import asyncio
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from typing import List, Optional, Union
 import logging
 
 from backend.models.interaction import NewTask, TaskUpdate
 from backend.auth.security import verify_api_key_dependency
-from backend.core.dependencies import get_supabase_client
+from backend.core.dependencies import get_supabase_client, retry_supabase_operation
+from backend.db.optimized_queries import OptimizedQueries
 
 logger = logging.getLogger(__name__)
 
@@ -32,23 +34,41 @@ class TaskListResponse(BaseModel):
     tasks: List[TaskResponse]
 
 @router.get("/", response_model=TaskListResponse)
-async def get_tasks(supabase_client = Depends(get_supabase_client)):
-    """Get all tasks from database."""
+@retry_supabase_operation(max_retries=2)
+async def get_tasks(
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=100, description="Number of tasks per page"),
+    status: Optional[str] = Query(None, description="Filter by task status"),
+    priority: Optional[str] = Query(None, description="Filter by task priority"),
+    supabase_client = Depends(get_supabase_client)
+):
+    """Get all tasks from database with pagination and filtering."""
     try:
-        logger.info("Fetching all tasks")
+        logger.info(f"Fetching tasks - page: {page}, page_size: {page_size}")
+        logger.info(f"Filters - status: {status}, priority: {priority}")
         logger.info(f"Supabase client available: {supabase_client is not None}")
+        
         if supabase_client:
-            logger.info("Executing Supabase query")
-            response = supabase_client.table("tasks").select("*").order("created_at", desc=True).execute()
-            logger.info(f"Supabase response received: {response is not None}")
-            tasks = response.data if response and hasattr(response, 'data') else []
-            logger.info(f"Number of tasks fetched: {len(tasks)}")
-            # Convert task IDs to strings to match the model expectation
-            for task in tasks:
-                if 'id' in task and isinstance(task['id'], int):
-                    task['id'] = str(task['id'])
-            logger.info(f"Successfully fetched {len(tasks)} tasks from database")
-            return TaskListResponse(tasks=tasks)
+            # Prepare filters
+            filters = {}
+            if status:
+                filters["status"] = status
+            if priority:
+                filters["priority"] = priority
+            
+            # Use optimized query with pagination
+            result = await OptimizedQueries.get_tasks_optimized(
+                supabase_client=supabase_client,
+                page=page,
+                page_size=page_size,
+                filters=filters
+            )
+            
+            logger.info(f"Successfully fetched {result['total_count']} tasks from database")
+            logger.info(f"Has more tasks: {result['has_more']}")
+            
+            # Return tasks in the expected format
+            return TaskListResponse(tasks=result["tasks"])
         else:
             logger.warning("Supabase client not available")
             return TaskListResponse(tasks=[])
@@ -57,10 +77,11 @@ async def get_tasks(supabase_client = Depends(get_supabase_client)):
         # Provide more specific error information
         error_detail = f"Failed to fetch tasks: {str(e)}"
         if "connection" in str(e).lower():
-            error_detail = "Database connection failed."
+            error_detail = "Database connection failed. Please check your network connection and try again."
         elif "timeout" in str(e).lower():
-            error_detail = "Database timeout."
+            error_detail = "Database timeout: The request took too long to complete. Please try again later."
         raise HTTPException(status_code=500, detail=error_detail)
+
 
 @router.post("/", response_model=TaskResponse, dependencies=[Depends(verify_api_key_dependency)])
 async def create_task(
